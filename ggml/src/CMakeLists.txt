@@ -588,6 +588,13 @@ if (GGML_SYCL)
     file(GLOB   GGML_SOURCES_SYCL "ggml-sycl/*.cpp")
     list(APPEND GGML_SOURCES_SYCL "ggml-sycl.cpp")
 
+    find_package(VTune)
+    message("-- VTune found:" ${VTune_FOUND})
+    if (${VTune_FOUND} AND GGML_SYCL_TARGET STREQUAL "INTEL")
+        list(APPEND GGML_EXTRA_INCLUDES ${VTune_INCLUDE_DIRS})
+        list(APPEND GGML_EXTRA_LIBS_PRIVATE ${VTune_LIBRARIES})
+    endif()
+
     find_package(DNNL)
     message("-- DNNL found:" ${DNNL_FOUND})
 

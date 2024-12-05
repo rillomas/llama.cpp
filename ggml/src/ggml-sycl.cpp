@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <regex>
+#include <ittnotify.h>
 
 #include <sycl/sycl.hpp>
 #include <sycl/half_type.hpp>
@@ -39,6 +40,10 @@
 #include "ggml-sycl/backend.hpp"
 #include "ggml-sycl/presets.hpp"
 #include "ggml-sycl/gemm.hpp"
+
+__itt_domain* g_domain = __itt_domain_create("SYCL");
+__itt_string_handle* g_matmul = __itt_string_handle_create("matmul");
+
 
 static bool g_sycl_loaded = false;
 
@@ -3403,6 +3408,7 @@ bool ggml_sycl_supports_dmmv(enum ggml_type type) {
 }
 
 static void ggml_sycl_mul_mat(ggml_backend_sycl_context & ctx, const ggml_tensor * src0, const ggml_tensor * src1, ggml_tensor * dst) {
+    __itt_task_begin(g_domain, __itt_null, __itt_null, g_matmul);
     const bool split = ggml_backend_buffer_is_sycl_split(src0->buffer);
     int64_t min_compute_capability = INT_MAX;
 
@@ -3464,6 +3470,7 @@ static void ggml_sycl_mul_mat(ggml_backend_sycl_context & ctx, const ggml_tensor
     } else {
         ggml_sycl_op_mul_mat(ctx, src0, src1, dst, ggml_sycl_op_mul_mat_sycl, false);
     }
+    __itt_task_end(g_domain);
 }
 
 
