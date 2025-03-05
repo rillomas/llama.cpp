@@ -54,6 +54,14 @@ if (Vulkan_FOUND)
     target_link_libraries(ggml-vulkan PRIVATE Vulkan::Vulkan)
     target_include_directories(ggml-vulkan PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
+    # Also link to VTune when we're using it
+    find_package(VTune)
+    message("-- VTune found:" ${VTune_FOUND})
+    if (${VTune_FOUND})
+        target_include_directories(ggml-vulkan PRIVATE ${VTune_INCLUDE_DIRS})
+        target_link_libraries(ggml-vulkan PRIVATE ${VTune_LIBRARIES})
+    endif()
+
     # Workaround to the "can't dereference invalidated vector iterator" bug in clang-cl debug build
     # Posssibly relevant: https://stackoverflow.com/questions/74748276/visual-studio-no-displays-the-correct-length-of-stdvector
     if (MSVC AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
