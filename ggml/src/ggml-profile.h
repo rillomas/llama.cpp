@@ -77,11 +77,11 @@ static inline void ggml_graph_profile_event(const struct ggml_cgraph *cg, enum g
 
 #else
 
-void ggml_graph_profile_init(struct ggml_cgraph *cg, int n_threads);
-void ggml_graph_profile_start(struct ggml_cgraph *cg, int n_threads);
-void ggml_graph_profile_finish(struct ggml_cgraph *cg, int n_threads);
-void ggml_graph_profile_free(struct ggml_cgraph *cg);
-void ggml_graph_profile_event(const struct ggml_cgraph *cg, enum ggml_profile_event e, int node_n, int ith);
+GGML_API void ggml_graph_profile_init(struct ggml_cgraph *cg, int n_threads);
+GGML_API void ggml_graph_profile_start(struct ggml_cgraph *cg, int n_threads);
+GGML_API void ggml_graph_profile_finish(struct ggml_cgraph *cg, int n_threads);
+GGML_API void ggml_graph_profile_free(struct ggml_cgraph *cg);
+GGML_API void ggml_graph_profile_event(const struct ggml_cgraph *cg, enum ggml_profile_event e, int node_n, int ith);
 
 #endif // GGML_GRAPH_PROFILER
 
