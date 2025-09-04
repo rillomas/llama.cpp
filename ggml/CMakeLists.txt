@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14) # for add_link_options and implicit target directories.
-project("ggml" C CXX)
+project("ggml" C CXX ASM)
 include(CheckIncludeFileCXX)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -39,8 +39,9 @@ if (WIN32)
     set(CMAKE_SHARED_MODULE_PREFIX  "")
 endif()
 
-option(BUILD_SHARED_LIBS "ggml: build shared libraries" ${BUILD_SHARED_LIBS_DEFAULT})
-option(GGML_BACKEND_DL   "ggml: build backends as dynamic libraries (requires BUILD_SHARED_LIBS)" OFF)
+option(BUILD_SHARED_LIBS           "ggml: build shared libraries" ${BUILD_SHARED_LIBS_DEFAULT})
+option(GGML_BACKEND_DL             "ggml: build backends as dynamic libraries (requires BUILD_SHARED_LIBS)" OFF)
+set(GGML_BACKEND_DIR "" CACHE PATH "ggml: directory to load dynamic backends from (requires GGML_BACKEND_DL")
 
 #
 # option list
@@ -129,10 +130,12 @@ endif()
 option(GGML_LASX             "ggml: enable lasx"             ON)
 option(GGML_LSX              "ggml: enable lsx"              ON)
 option(GGML_RVV              "ggml: enable rvv"              ON)
-option(GGML_RV_ZFH           "ggml: enable riscv zfh"        OFF)
+option(GGML_RV_ZFH           "ggml: enable riscv zfh"        ON)
+option(GGML_RV_ZVFH          "ggml: enable riscv zvfh"       ON)
+option(GGML_RV_ZICBOP        "ggml: enable riscv zicbop"     ON)
 option(GGML_XTHEADVECTOR     "ggml: enable xtheadvector"     OFF)
 option(GGML_VXE              "ggml: enable vxe"              ON)
-option(GGML_NNPA             "ggml: enable nnpa"             ON)
+option(GGML_NNPA             "ggml: enable nnpa"             OFF)  # temp disabled by default, see: https://github.com/ggml-org/llama.cpp/issues/14877
 
 option(GGML_CPU_ALL_VARIANTS "ggml: build all variants of the CPU backend (requires GGML_BACKEND_DL)" OFF)
 set(GGML_CPU_ARM_ARCH        "" CACHE STRING "ggml: CPU architecture for ARM")
@@ -158,7 +161,6 @@ option(GGML_CUDA                            "ggml: use CUDA"                    
 option(GGML_MUSA                            "ggml: use MUSA"                                  OFF)
 option(GGML_CUDA_FORCE_MMQ                  "ggml: use mmq kernels instead of cuBLAS"         OFF)
 option(GGML_CUDA_FORCE_CUBLAS               "ggml: always use cuBLAS instead of mmq kernels"  OFF)
-option(GGML_CUDA_F16                        "ggml: use 16 bit floats for some calculations"   OFF)
 set   (GGML_CUDA_PEER_MAX_BATCH_SIZE "128" CACHE STRING
                                             "ggml: max. batch size for using peer access")
 option(GGML_CUDA_NO_PEER_COPY               "ggml: do not use peer to peer copies"            OFF)
@@ -175,6 +177,8 @@ option(GGML_HIP_GRAPHS                      "ggml: use HIP graph, experimental, 
 option(GGML_HIP_NO_VMM                      "ggml: do not try to use HIP VMM"                 ON)
 option(GGML_HIP_ROCWMMA_FATTN               "ggml: enable rocWMMA for FlashAttention"         OFF)
 option(GGML_HIP_FORCE_ROCWMMA_FATTN_GFX12   "ggml: enable rocWMMA FlashAttention on GFX12"    OFF)
+option(GGML_HIP_MMQ_MFMA                    "ggml: enable MFMA MMA for CDNA in MMQ"           ON)
+option(GGML_HIP_EXPORT_METRICS              "ggml: enable kernel perf metrics output"         OFF)
 option(GGML_MUSA_GRAPHS                     "ggml: use MUSA graph, experimental, unstable"    OFF)
 option(GGML_MUSA_MUDNN_COPY                 "ggml: enable muDNN for accelerated copy"         OFF)
 option(GGML_VULKAN                          "ggml: use Vulkan"                                OFF)
@@ -186,6 +190,7 @@ option(GGML_VULKAN_VALIDATE                 "ggml: enable Vulkan validation"    
 option(GGML_VULKAN_RUN_TESTS                "ggml: run Vulkan tests"                          OFF)
 option(GGML_WEBGPU                          "ggml: use WebGPU"                                OFF)
 option(GGML_WEBGPU_DEBUG                    "ggml: enable WebGPU debug output"                OFF)
+option(GGML_ZDNN                            "ggml: use zDNN"                                  OFF)
 option(GGML_METAL                           "ggml: use Metal"                                 ${GGML_METAL_DEFAULT})
 option(GGML_METAL_USE_BF16                  "ggml: use bfloat if available"                   OFF)
 option(GGML_METAL_NDEBUG                    "ggml: disable Metal debugging"                   OFF)

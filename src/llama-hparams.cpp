@@ -2,9 +2,15 @@
 
 #include "ggml.h"
 
-void llama_hparams::set_swa_pattern(uint32_t n_pattern) {
-    for (uint32_t il = 0; il < n_layer; ++il) {
-        swa_layers[il] = n_pattern == 0 || (il % n_pattern < (n_pattern - 1));
+void llama_hparams::set_swa_pattern(uint32_t n_pattern, bool dense_first) {
+    if (dense_first) {
+        for (uint32_t il = 0; il < n_layer; ++il) {
+            swa_layers[il] = n_pattern == 0 || (il % n_pattern != 0);
+        }
+    } else {
+        for (uint32_t il = 0; il < n_layer; ++il) {
+            swa_layers[il] = n_pattern == 0 || (il % n_pattern < (n_pattern - 1));
+        }
     }
 }
 
@@ -146,4 +152,29 @@ bool llama_hparams::is_swa(uint32_t il) const {
     }
 
     GGML_ABORT("fatal error");
+}
+
+bool llama_hparams::has_kv(uint32_t il) const {
+    if (n_layer_kv_from_start >= 0) {
+        if (il < (uint32_t) n_layer_kv_from_start) {
+            return true;
+        }
+
+        return false;
+    }
+
+    // by default, all layers have kv
+    return true;
+}
+
+uint32_t llama_hparams::n_layer_kv() const {
+    uint32_t res = 0;
+
+    for (uint32_t il = 0; il < n_layer; ++il) {
+        if (has_kv(il)) {
+            res++;
+        }
+    }
+
+    return res;
 }

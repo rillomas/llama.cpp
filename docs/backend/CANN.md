@@ -310,5 +310,11 @@ Specifies the memory pool management strategy:
 
 Controls automatic cleanup of the memory pool. This option is only effective when using the prio or leg memory pool strategies.
 
-## TODO
-- Support more models and data types.
+### GGML_CANN_WEIGHT_NZ
+
+Converting the matmul weight format from ND to NZ can significantly improve performance on the 310I DUO NPU.
+
+### GGML_CANN_DISABLE_ACL_GRAPH
+
+When this variable is set, ACL graph execution is disabled and operators are executed in an op-by-op (eager) mode.
+This mode is mainly intended for debugging or for cases where the overhead of graph construction and execution is not desirable.
