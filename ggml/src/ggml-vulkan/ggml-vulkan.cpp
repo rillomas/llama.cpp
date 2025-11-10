@@ -3383,24 +3383,11 @@ static void ggml_vk_load_shaders(vk_device& device) {
         rm_stdq = 2;
     uint32_t rm_iq = 2 * rm_kq;
 
-    char* subgroup_size_str = getenv("GGML_VK_SUBGROUP_SIZE");
-    int subgroup_size_arg = -1;
-    if (subgroup_size_str) {
-        if (string_to_int(subgroup_size_str, subgroup_size_arg)) {
-            GGML_LOG_DEBUG("ggml_vulkan: Given subgroup size: %d\n", subgroup_size_arg);
-        } else {
-            GGML_LOG_DEBUG("ggml_vulkan: Invalid subgroup size string: %s\n", subgroup_size_str);
-        }
-    }
-
     const bool use_subgroups = device->subgroup_arithmetic && device->architecture != vk_device_architecture::AMD_GCN;
     // Ensure a subgroup size >= 16 is available
     const bool use_subgroups16 = use_subgroups && subgroup_min_size_16;
 
-    const uint32_t subgroup_size_candidate = (device->vendor_id == VK_VENDOR_ID_INTEL && device->subgroup_size_control && device->subgroup_min_size <= 16 && device->subgroup_max_size >= 16) ? 16 : device->subgroup_size;
-    // Force provided subgroup size
-    const uint32_t subgroup_size = (subgroup_size_arg != -1) ? subgroup_size_arg : subgroup_size_candidate;
-    GGML_LOG_INFO("ggml_vulkan: device->subgroup_size: %u, actual subgroup_size %u\n", device->subgroup_size, subgroup_size);
+    const uint32_t subgroup_size = (device->vendor_id == VK_VENDOR_ID_INTEL && device->subgroup_size_control && device->subgroup_min_size <= 16 && device->subgroup_max_size >= 16) ? 16 : device->subgroup_size;
     const uint32_t subgroup_size16 = std::max(subgroup_size, 16u);
 
     const uint32_t force_subgroup_size = use_subgroups ? subgroup_size : 0;
@@ -4157,7 +4144,23 @@ static vk_device ggml_vk_get_device(size_t idx) {
         }
         device->suballocation_block_size = std::min(device->suballocation_block_size, device->max_memory_allocation_size);
 
-        device->subgroup_size = subgroup_props.subgroupSize;
+        char* subgroup_size_str = getenv("GGML_VK_SUBGROUP_SIZE");
+        int subgroup_size_arg = -1;
+        if (subgroup_size_str) {
+            if (string_to_int(subgroup_size_str, subgroup_size_arg)) {
+                GGML_LOG_DEBUG("ggml_vulkan: Given subgroup size: %d\n", subgroup_size_arg);
+            } else {
+                GGML_LOG_DEBUG("ggml_vulkan: Invalid subgroup size string: %s\n", subgroup_size_str);
+            }
+        }
+        if (subgroup_size_arg != -1) {
+            // Force provided subgroup size
+            device->subgroup_size = subgroup_size_arg;
+        } else {
+            device->subgroup_size = subgroup_props.subgroupSize;
+        }
+        GGML_LOG_INFO("ggml_vulkan: device->subgroup_size %u\n", device->subgroup_size);
+
         device->uma = device->properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu;
         if (sm_builtins) {
             device->shader_core_count = sm_props.shaderSMCount;
