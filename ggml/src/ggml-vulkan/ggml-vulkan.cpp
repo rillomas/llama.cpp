@@ -2533,6 +2533,42 @@ static uint32_t get_subgroup_size(const std::string &pipeline_name, const vk_dev
     return 0; // If no matching configuration is found
 }
 
+static bool is_valid_integer_string(const char* str) {
+    if (str == nullptr || *str == '\0') return false;
+
+    // Skip leading whitespaces
+    while (isspace(*str)) ++str;
+
+    // Handle optional sign
+    if (*str == '+' || *str == '-') ++str;
+
+    // At least one digit required
+    if (!isdigit(*str)) return false;
+
+    while (*str) {
+        if (!isdigit(*str)) return false;
+        ++str;
+    }
+
+    return true;
+}
+
+static bool string_to_int(const char* str, int& result) {
+    if (!is_valid_integer_string(str)) return false;
+
+    char* endPtr;
+    long val = std::strtol(str, &endPtr, 10);
+
+    // Check for overflow/underflow
+    if (val < std::numeric_limits<int>::min() || val > std::numeric_limits<int>::max()) {
+        return false;
+    }
+
+    result = static_cast<int>(val);
+    return true;
+}
+
+
 static void ggml_vk_load_shaders(vk_device& device) {
     VK_LOG_DEBUG("ggml_vk_load_shaders(" << device->name << ")");
 
@@ -3347,11 +3383,24 @@ static void ggml_vk_load_shaders(vk_device& device) {
         rm_stdq = 2;
     uint32_t rm_iq = 2 * rm_kq;
 
+    char* subgroup_size_str = getenv("GGML_VK_SUBGROUP_SIZE");
+    int subgroup_size_arg = -1;
+    if (subgroup_size_str) {
+        if (string_to_int(subgroup_size_str, subgroup_size_arg)) {
+            GGML_LOG_DEBUG("ggml_vulkan: Given subgroup size: %d\n", subgroup_size_arg);
+        } else {
+            GGML_LOG_DEBUG("ggml_vulkan: Invalid subgroup size string: %s\n", subgroup_size_str);
+        }
+    }
+
     const bool use_subgroups = device->subgroup_arithmetic && device->architecture != vk_device_architecture::AMD_GCN;
     // Ensure a subgroup size >= 16 is available
     const bool use_subgroups16 = use_subgroups && subgroup_min_size_16;
 
-    const uint32_t subgroup_size = (device->vendor_id == VK_VENDOR_ID_INTEL && device->subgroup_size_control && device->subgroup_min_size <= 16 && device->subgroup_max_size >= 16) ? 16 : device->subgroup_size;
+    const uint32_t subgroup_size_candidate = (device->vendor_id == VK_VENDOR_ID_INTEL && device->subgroup_size_control && device->subgroup_min_size <= 16 && device->subgroup_max_size >= 16) ? 16 : device->subgroup_size;
+    // Force provided subgroup size
+    const uint32_t subgroup_size = (subgroup_size_arg != -1) ? subgroup_size_arg : subgroup_size_candidate;
+    GGML_LOG_INFO("ggml_vulkan: device->subgroup_size: %u, actual subgroup_size %u\n", device->subgroup_size, subgroup_size);
     const uint32_t subgroup_size16 = std::max(subgroup_size, 16u);
 
     const uint32_t force_subgroup_size = use_subgroups ? subgroup_size : 0;
@@ -4858,6 +4907,7 @@ static void ggml_vk_instance_init() {
     }
 
     vk_perf_logger_enabled = getenv("GGML_VK_PERF_LOGGER") != nullptr;
+
 
     // See https://github.com/KhronosGroup/Vulkan-Hpp?tab=readme-ov-file#extensions--per-device-function-pointers-
     VULKAN_HPP_DEFAULT_DISPATCHER.init(vk_instance.instance);
