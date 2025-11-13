@@ -4938,7 +4938,12 @@ static void ggml_vk_instance_init() {
     vk::ValidationFeaturesEXT validation_features;
 
     if (validation_ext) {
-        features_enable = { vk::ValidationFeatureEnableEXT::eBestPractices };
+        features_enable = { 
+            vk::ValidationFeatureEnableEXT::eBestPractices,
+#ifdef GGML_VULKAN_SHADER_DEBUG_PRINT
+            vk::ValidationFeatureEnableEXT::eDebugPrintf,
+#endif
+         };
         validation_features = {
             features_enable,
             {},
