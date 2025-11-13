@@ -4914,10 +4914,11 @@ static void ggml_vk_instance_init() {
 
     if (validation_ext) {
         layers.push_back("VK_LAYER_KHRONOS_validation");
+        GGML_LOG_DEBUG("ggml_vulkan: Validation layers enabled\n");
     }
     std::vector<const char*> extensions;
     if (validation_ext) {
-        extensions.push_back("VK_EXT_validation_features");
+        extensions.push_back("VK_EXT_layer_settings");
     }
 #ifdef __APPLE__
     if (portability_enumeration_ext) {
@@ -4927,31 +4928,38 @@ static void ggml_vk_instance_init() {
     if (debug_utils_ext) {
         extensions.push_back("VK_EXT_debug_utils");
     }
-    vk::InstanceCreateInfo instance_create_info(vk::InstanceCreateFlags{}, &app_info, layers, extensions);
+    VkBool32 enable_best_practice = validation_ext;
+#ifdef GGML_VULKAN_SHADER_DEBUG_PRINT
+    VkBool32 enable_debug_printf = VK_TRUE;
+#else
+    VkBool32 enable_debug_printf = VK_FALSE;
+#endif
+    std::vector<vk::LayerSettingEXT> settings = {
+        {
+            "VK_LAYER_KHRONOS_validation",
+            "validate_best_practices",
+            vk::LayerSettingTypeEXT::eBool32,
+            1,
+            &enable_best_practice
+        },
+        {
+            "VK_LAYER_KHRONOS_validation",
+            "printf_enable",
+            vk::LayerSettingTypeEXT::eBool32,
+            1,
+            &enable_debug_printf
+        }
+    };
+
+    vk::LayerSettingsCreateInfoEXT layer_setting_info(settings);
+
+    vk::InstanceCreateInfo instance_create_info(vk::InstanceCreateFlags{}, &app_info, layers, extensions, &layer_setting_info);
 #ifdef __APPLE__
     if (portability_enumeration_ext) {
         instance_create_info.flags |= vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR;
     }
 #endif
 
-    std::vector<vk::ValidationFeatureEnableEXT> features_enable;
-    vk::ValidationFeaturesEXT validation_features;
-
-    if (validation_ext) {
-        features_enable = { 
-            vk::ValidationFeatureEnableEXT::eBestPractices,
-#ifdef GGML_VULKAN_SHADER_DEBUG_PRINT
-            vk::ValidationFeatureEnableEXT::eDebugPrintf,
-#endif
-         };
-        validation_features = {
-            features_enable,
-            {},
-        };
-        validation_features.setPNext(nullptr);
-        instance_create_info.setPNext(&validation_features);
-        GGML_LOG_DEBUG("ggml_vulkan: Validation layers enabled\n");
-    }
     vk_instance.instance = vk::createInstance(instance_create_info);
     vk_instance_initialized = true;
 
