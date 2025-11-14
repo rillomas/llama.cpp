@@ -4204,7 +4204,7 @@ static vk_device ggml_vk_get_device(size_t idx) {
                 GGML_LOG_DEBUG("ggml_vulkan: Invalid subgroup size string: %s\n", subgroup_size_str);
             }
         }
-        const bool subgroup_size_is_default = (subgroup_size_arg == (int)subgroup_props.subgroupSize);
+        const bool subgroup_size_is_multiple_of_default = (subgroup_size_arg % (int)subgroup_props.subgroupSize) == 0;
         device->subgroup_size = subgroup_size_arg;
         GGML_LOG_INFO("ggml_vulkan: device->subgroup_size %u\n", device->subgroup_size);
 
@@ -4394,7 +4394,10 @@ static vk_device ggml_vk_get_device(size_t idx) {
                 (subgroup_size_control_props.requiredSubgroupSizeStages & vk::ShaderStageFlagBits::eCompute) &&
                 subgroup_size_control_features.subgroupSizeControl;
 
-        device->subgroup_require_full_support = subgroup_size_is_default && subgroup_size_control_features.computeFullSubgroups;
+        // We must not enable VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT when the
+        // given subgroup size is not a multiple of the default subgroup size
+        // https://docs.vulkan.org/refpages/latest/refpages/source/VkPipelineShaderStageCreateInfo.html#VUID-VkPipelineShaderStageCreateInfo-flags-02759
+        device->subgroup_require_full_support = subgroup_size_is_multiple_of_default && subgroup_size_control_features.computeFullSubgroups;
 
 #if defined(VK_KHR_cooperative_matrix)
         device->coopmat_support = device->coopmat_support && coopmat_features.cooperativeMatrix;
