@@ -236,6 +236,7 @@ static void ggml_check_sycl() try {
 #else
         GGML_LOG_INFO("  GGML_SYCL_F16: no\n");
 #endif
+        GGML_LOG_INFO("  GGML_SYCL_WARP_SIZE: %d\n", WARP_SIZE);
 
 /* NOT REMOVE, keep it for next optimize for XMX.
 #if defined(SYCL_USE_XMX)

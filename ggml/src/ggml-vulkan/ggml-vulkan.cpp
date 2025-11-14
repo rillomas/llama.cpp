@@ -2564,6 +2564,42 @@ static uint32_t get_subgroup_size(const std::string &pipeline_name, const vk_dev
     return 0; // If no matching configuration is found
 }
 
+static bool is_valid_integer_string(const char* str) {
+    if (str == nullptr || *str == '\0') return false;
+
+    // Skip leading whitespaces
+    while (isspace(*str)) ++str;
+
+    // Handle optional sign
+    if (*str == '+' || *str == '-') ++str;
+
+    // At least one digit required
+    if (!isdigit(*str)) return false;
+
+    while (*str) {
+        if (!isdigit(*str)) return false;
+        ++str;
+    }
+
+    return true;
+}
+
+static bool string_to_int(const char* str, int& result) {
+    if (!is_valid_integer_string(str)) return false;
+
+    char* endPtr;
+    long val = std::strtol(str, &endPtr, 10);
+
+    // Check for overflow/underflow
+    if (val < std::numeric_limits<int>::min() || val > std::numeric_limits<int>::max()) {
+        return false;
+    }
+
+    result = static_cast<int>(val);
+    return true;
+}
+
+
 static void ggml_vk_load_shaders(vk_device& device) {
     VK_LOG_DEBUG("ggml_vk_load_shaders(" << device->name << ")");
 
@@ -4159,7 +4195,19 @@ static vk_device ggml_vk_get_device(size_t idx) {
         }
         device->suballocation_block_size = std::min(device->suballocation_block_size, device->max_memory_allocation_size);
 
-        device->subgroup_size = subgroup_props.subgroupSize;
+        char* subgroup_size_str = getenv("GGML_VK_SUBGROUP_SIZE");
+        int subgroup_size_arg = (int)subgroup_props.subgroupSize;
+        if (subgroup_size_str) {
+            if (string_to_int(subgroup_size_str, subgroup_size_arg)) {
+                GGML_LOG_DEBUG("ggml_vulkan: Given subgroup size: %d\n", subgroup_size_arg);
+            } else {
+                GGML_LOG_DEBUG("ggml_vulkan: Invalid subgroup size string: %s\n", subgroup_size_str);
+            }
+        }
+        const bool subgroup_size_is_multiple_of_default = (subgroup_size_arg % (int)subgroup_props.subgroupSize) == 0;
+        device->subgroup_size = subgroup_size_arg;
+        GGML_LOG_INFO("ggml_vulkan: device->subgroup_size %u\n", device->subgroup_size);
+
         device->uma = device->properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu;
         if (sm_builtins) {
             device->shader_core_count = sm_props.shaderSMCount;
@@ -4346,7 +4394,10 @@ static vk_device ggml_vk_get_device(size_t idx) {
                 (subgroup_size_control_props.requiredSubgroupSizeStages & vk::ShaderStageFlagBits::eCompute) &&
                 subgroup_size_control_features.subgroupSizeControl;
 
-        device->subgroup_require_full_support = subgroup_size_control_features.computeFullSubgroups;
+        // We must not enable VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT when the
+        // given subgroup size is not a multiple of the default subgroup size
+        // https://docs.vulkan.org/refpages/latest/refpages/source/VkPipelineShaderStageCreateInfo.html#VUID-VkPipelineShaderStageCreateInfo-flags-02759
+        device->subgroup_require_full_support = subgroup_size_is_multiple_of_default && subgroup_size_control_features.computeFullSubgroups;
 
 #if defined(VK_KHR_cooperative_matrix)
         device->coopmat_support = device->coopmat_support && coopmat_features.cooperativeMatrix;
@@ -4824,7 +4875,7 @@ static void ggml_vk_print_gpu_info(size_t idx) {
     }
 }
 
-static bool ggml_vk_instance_validation_ext_available();
+static bool ggml_vk_instance_layer_settings_available();
 static bool ggml_vk_instance_portability_enumeration_ext_available(const std::vector<vk::ExtensionProperties>& instance_extensions);
 static bool ggml_vk_instance_debug_utils_ext_available(const std::vector<vk::ExtensionProperties> & instance_extensions);
 static bool ggml_vk_device_is_supported(const vk::PhysicalDevice & vkdev);
@@ -4853,19 +4904,20 @@ static void ggml_vk_instance_init() {
     vk::ApplicationInfo app_info{ "ggml-vulkan", 1, nullptr, 0, api_version };
 
     const std::vector<vk::ExtensionProperties> instance_extensions = vk::enumerateInstanceExtensionProperties();
-    const bool validation_ext = ggml_vk_instance_validation_ext_available();
+    const bool layer_settings = ggml_vk_instance_layer_settings_available();
 #ifdef __APPLE__
     const bool portability_enumeration_ext = ggml_vk_instance_portability_enumeration_ext_available(instance_extensions);
 #endif
     const bool debug_utils_ext = ggml_vk_instance_debug_utils_ext_available(instance_extensions) && getenv("GGML_VK_DEBUG_MARKERS") != nullptr;
     std::vector<const char*> layers;
 
-    if (validation_ext) {
+    if (layer_settings) {
         layers.push_back("VK_LAYER_KHRONOS_validation");
+        GGML_LOG_DEBUG("ggml_vulkan: Validation layers enabled\n");
     }
     std::vector<const char*> extensions;
-    if (validation_ext) {
-        extensions.push_back("VK_EXT_validation_features");
+    if (layer_settings) {
+        extensions.push_back("VK_EXT_layer_settings");
     }
 #ifdef __APPLE__
     if (portability_enumeration_ext) {
@@ -4875,26 +4927,38 @@ static void ggml_vk_instance_init() {
     if (debug_utils_ext) {
         extensions.push_back("VK_EXT_debug_utils");
     }
-    vk::InstanceCreateInfo instance_create_info(vk::InstanceCreateFlags{}, &app_info, layers, extensions);
+    VkBool32 enable_best_practice = layer_settings;
+#ifdef GGML_VULKAN_SHADER_DEBUG_PRINT
+    VkBool32 enable_debug_printf = VK_TRUE;
+#else
+    VkBool32 enable_debug_printf = VK_FALSE;
+#endif
+    std::vector<vk::LayerSettingEXT> settings = {
+        {
+            "VK_LAYER_KHRONOS_validation",
+            "validate_best_practices",
+            vk::LayerSettingTypeEXT::eBool32,
+            1,
+            &enable_best_practice
+        },
+        {
+            "VK_LAYER_KHRONOS_validation",
+            "printf_enable",
+            vk::LayerSettingTypeEXT::eBool32,
+            1,
+            &enable_debug_printf
+        }
+    };
+
+    vk::LayerSettingsCreateInfoEXT layer_setting_info(settings);
+
+    vk::InstanceCreateInfo instance_create_info(vk::InstanceCreateFlags{}, &app_info, layers, extensions, &layer_setting_info);
 #ifdef __APPLE__
     if (portability_enumeration_ext) {
         instance_create_info.flags |= vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR;
     }
 #endif
 
-    std::vector<vk::ValidationFeatureEnableEXT> features_enable;
-    vk::ValidationFeaturesEXT validation_features;
-
-    if (validation_ext) {
-        features_enable = { vk::ValidationFeatureEnableEXT::eBestPractices };
-        validation_features = {
-            features_enable,
-            {},
-        };
-        validation_features.setPNext(nullptr);
-        instance_create_info.setPNext(&validation_features);
-        GGML_LOG_DEBUG("ggml_vulkan: Validation layers enabled\n");
-    }
     vk_instance.instance = vk::createInstance(instance_create_info);
     vk_instance_initialized = true;
 
@@ -4909,6 +4973,7 @@ static void ggml_vk_instance_init() {
     }
 
     vk_perf_logger_enabled = getenv("GGML_VK_PERF_LOGGER") != nullptr;
+
 
     // See https://github.com/KhronosGroup/Vulkan-Hpp?tab=readme-ov-file#extensions--per-device-function-pointers-
     VULKAN_HPP_DEFAULT_DISPATCHER.init(vk_instance.instance);
@@ -13875,21 +13940,21 @@ ggml_backend_reg_t ggml_backend_vk_reg() {
 }
 
 // Extension availability
-static bool ggml_vk_instance_validation_ext_available() {
+static bool ggml_vk_instance_layer_settings_available() {
 #ifdef GGML_VULKAN_VALIDATE
     // Check if validation layer provides the extension
     const std::string layer_name = "VK_LAYER_KHRONOS_validation";
     for (const auto& layer : vk::enumerateInstanceLayerProperties()) {
         if (layer_name == layer.layerName.data()) {
             for (const auto& ext : vk::enumerateInstanceExtensionProperties(layer_name)) {
-                if (strcmp("VK_EXT_validation_features", ext.extensionName.data()) == 0) {
+                if (strcmp("VK_EXT_layer_settings", ext.extensionName.data()) == 0) {
                     return true;
                 }
             }
         }
     }
 
-    std::cerr << "ggml_vulkan: WARNING: Validation layer or layer extension VK_EXT_validation_features not found." << std::endl;
+    std::cerr << "ggml_vulkan: WARNING: Validation layer or layer extension VK_EXT_layer_settings not found." << std::endl;
 #endif
     return false;
 }

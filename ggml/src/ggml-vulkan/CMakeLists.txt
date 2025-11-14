@@ -113,7 +113,13 @@ if (Vulkan_FOUND)
     endif()
 
     if (GGML_VULKAN_VALIDATE)
+        message(STATUS "Vulkan Validation Enabled")
         add_compile_definitions(GGML_VULKAN_VALIDATE)
+    endif()
+
+    if (GGML_VULKAN_SHADER_DEBUG_PRINT)
+        message(STATUS "Vulkan Shader debug print Enabled")
+        add_compile_definitions(GGML_VULKAN_SHADER_DEBUG_PRINT)
     endif()
 
     if (GGML_VULKAN_RUN_TESTS)
