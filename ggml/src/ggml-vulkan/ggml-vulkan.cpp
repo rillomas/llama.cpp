@@ -4196,7 +4196,7 @@ static vk_device ggml_vk_get_device(size_t idx) {
         device->suballocation_block_size = std::min(device->suballocation_block_size, device->max_memory_allocation_size);
 
         char* subgroup_size_str = getenv("GGML_VK_SUBGROUP_SIZE");
-        int subgroup_size_arg = -1;
+        int subgroup_size_arg = (int)subgroup_props.subgroupSize;
         if (subgroup_size_str) {
             if (string_to_int(subgroup_size_str, subgroup_size_arg)) {
                 GGML_LOG_DEBUG("ggml_vulkan: Given subgroup size: %d\n", subgroup_size_arg);
@@ -4204,12 +4204,8 @@ static vk_device ggml_vk_get_device(size_t idx) {
                 GGML_LOG_DEBUG("ggml_vulkan: Invalid subgroup size string: %s\n", subgroup_size_str);
             }
         }
-        if (subgroup_size_arg != -1) {
-            // Force provided subgroup size
-            device->subgroup_size = subgroup_size_arg;
-        } else {
-            device->subgroup_size = subgroup_props.subgroupSize;
-        }
+        const bool subgroup_size_is_default = (subgroup_size_arg == (int)subgroup_props.subgroupSize);
+        device->subgroup_size = subgroup_size_arg;
         GGML_LOG_INFO("ggml_vulkan: device->subgroup_size %u\n", device->subgroup_size);
 
         device->uma = device->properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu;
@@ -4398,7 +4394,7 @@ static vk_device ggml_vk_get_device(size_t idx) {
                 (subgroup_size_control_props.requiredSubgroupSizeStages & vk::ShaderStageFlagBits::eCompute) &&
                 subgroup_size_control_features.subgroupSizeControl;
 
-        device->subgroup_require_full_support = subgroup_size_control_features.computeFullSubgroups;
+        device->subgroup_require_full_support = subgroup_size_is_default && subgroup_size_control_features.computeFullSubgroups;
 
 #if defined(VK_KHR_cooperative_matrix)
         device->coopmat_support = device->coopmat_support && coopmat_features.cooperativeMatrix;
