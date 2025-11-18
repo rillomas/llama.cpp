@@ -246,7 +246,8 @@ enum vk_device_architecture {
     AMD_RDNA1,
     AMD_RDNA2,
     AMD_RDNA3,
-    INTEL_XE2,
+    INTEL_PRE_XE2,
+    INTEL_XE2_ONWARD,
     NVIDIA_PRE_TURING,
 };
 
@@ -319,12 +320,15 @@ static vk_device_architecture get_device_architecture(const vk::PhysicalDevice& 
         props2.pNext = &subgroup_size_control_props;
         device.getProperties2(&props2);
 
-        if (subgroup_size_control_props.minSubgroupSize == 16) {
-            // Xe2 architecture uses SIMD16 while previous Xe and Gen architecture uses SIMD8.
-            // Minimum subgroup size matches the SIMD width so we distinguish architecture by checking this value.
-            // https://www.intel.com/content/www/us/en/content-details/824434/2024-intel-tech-tour-xe2-and-lunar-lake-s-gpu.html
-            // https://www.intel.com/content/www/us/en/docs/oneapi/optimization-guide-gpu/2025-0/intel-xe-gpu-architecture.html
-            return vk_device_architecture::INTEL_XE2;
+        // Xe2 architecture uses SIMD16 while previous Xe and Gen architecture uses SIMD8.
+        // Minimum subgroup size matches the SIMD width so we distinguish architecture by checking this value.
+        // https://www.intel.com/content/www/us/en/content-details/824434/2024-intel-tech-tour-xe2-and-lunar-lake-s-gpu.html
+        // https://www.intel.com/content/www/us/en/docs/oneapi/optimization-guide-gpu/2025-0/intel-xe-gpu-architecture.html
+        switch (subgroup_size_control_props.minSubgroupSize) {
+            case 8:
+                return vk_device_architecture::INTEL_PRE_XE2;
+            case 16:
+                return vk_device_architecture::INTEL_XE2_ONWARD;
         }
     } else if (props.vendorID == VK_VENDOR_ID_NVIDIA) {
         const std::vector<vk::ExtensionProperties> ext_props = device.enumerateDeviceExtensionProperties();
@@ -2606,6 +2610,11 @@ static const std::unordered_map<std::string, uint32_t> rdna2_pipelines = {
 
 static constexpr uint32_t RDNA_DEFAULT_SUBGROUP_SIZE = 32;
 
+// Intel GPU can use subgroup 8, 16, or 32 depending on architeture.
+// Pre-Xe2 is 8, 16, or 32 and Xe2 onward is 16 or 32. 32 is the default if nothing is specified.
+// We are using 16 as current default since we see better compute utilization.
+static constexpr uint32_t INTEL_DEFAULT_SUBGROUP_SIZE = 16;
+
 // Define configurations for different GPUs.
 static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {
     {
@@ -2621,6 +2630,18 @@ static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {
             rdna2_pipelines,
         },
         RDNA_DEFAULT_SUBGROUP_SIZE
+    },
+    {
+        vk_device_architecture::INTEL_PRE_XE2,
+        {
+        },
+        INTEL_DEFAULT_SUBGROUP_SIZE
+    },
+    {
+        vk_device_architecture::INTEL_XE2_ONWARD,
+        {
+        },
+        INTEL_DEFAULT_SUBGROUP_SIZE
     },
 };
 
@@ -13962,9 +13983,8 @@ static bool ggml_vk_device_is_supported(const vk::PhysicalDevice & vkdev) {
 static bool ggml_vk_khr_cooperative_matrix_support(const vk::PhysicalDeviceProperties& props, const vk::PhysicalDeviceDriverProperties& driver_props, vk_device_architecture arch) {
     switch (props.vendorID) {
     case VK_VENDOR_ID_INTEL:
-        // Only allowing Xe2 GPU at the moment since Xe2 GPU can gain significant performance boost,
-        // while some older hardware (ex. Arc A770) has performance regressions
-        return arch == vk_device_architecture::INTEL_XE2;
+        // Only allowing Xe2 and newer GPU at the moment since some older hardware (ex. Arc A770) have performance regressions
+        return arch == vk_device_architecture::INTEL_XE2_ONWARD;
     case VK_VENDOR_ID_AMD:
         if (driver_props.driverID == vk::DriverId::eAmdProprietary || driver_props.driverID == vk::DriverId::eAmdOpenSource) {
             // Workaround for AMD proprietary driver reporting support on all GPUs
