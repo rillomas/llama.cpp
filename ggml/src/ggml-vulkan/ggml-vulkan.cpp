@@ -2656,10 +2656,13 @@ static const std::unordered_map<std::string, uint32_t> rdna2_pipelines = {
 
 static constexpr uint32_t RDNA_DEFAULT_SUBGROUP_SIZE = 32;
 
+static const std::unordered_map<std::string, uint32_t> xe2_onward_pipelines = {
+    {"matmul_id_subgroup_q4_k_f32_f16acc_aligned_m", 16},
+    {"matmul_id_subgroup_q6_k_f32_f16acc_aligned_m", 16},
+};
 // Intel GPU can use subgroup 8, 16, or 32 depending on architeture.
-// Pre-Xe2 is 8, 16, or 32 and Xe2 onward is 16 or 32. 32 is the default if nothing is specified.
-// We are using 16 as current default since we see better compute utilization.
-static constexpr uint32_t INTEL_DEFAULT_SUBGROUP_SIZE = 16;
+// Pre-Xe2 is 8, 16, or 32. Xe2 onward is 16 or 32. 32 is the default if nothing is specified.
+static constexpr uint32_t INTEL_DEFAULT_SUBGROUP_SIZE = 32;
 
 // Define configurations for different GPUs.
 static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {
@@ -2686,6 +2689,7 @@ static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {
     {
         vk_device_architecture::INTEL_XE2_ONWARD,
         {
+            xe2_onward_pipelines,
         },
         INTEL_DEFAULT_SUBGROUP_SIZE
     },
