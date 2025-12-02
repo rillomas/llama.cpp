@@ -4,7 +4,6 @@
 #extension GL_KHR_shader_subgroup_basic : enable
 #extension GL_KHR_shader_subgroup_arithmetic : enable
 #extension GL_KHR_shader_subgroup_shuffle : enable
-#extension GL_EXT_debug_printf : enable
 
 #include "types.glsl"
 
@@ -76,9 +75,6 @@ void softmax_warp_inplace(inout float vals[experts_per_thread], const uint limit
 }
 
 void main() {
-    if (gl_SubgroupID == 0) {
-        debugPrintfEXT("Hello world %d", gl_SubgroupID);
-    }
     const uint row = gl_WorkGroupID.x * gl_WorkGroupSize.y + gl_LocalInvocationID.y;
     if (row >= n_rows) {
         return;
