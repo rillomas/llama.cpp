@@ -4882,6 +4882,11 @@ static void ggml_vk_instance_init() {
         extensions.push_back("VK_EXT_debug_utils");
     }
     VkBool32 enable_best_practice = layer_settings;
+#ifdef GGML_VULKAN_SHADER_DEBUG_PRINT
+    VkBool32 enable_debug_printf = VK_TRUE;
+#else
+    VkBool32 enable_debug_printf = VK_FALSE;
+#endif
     std::vector<vk::LayerSettingEXT> settings = {
         {
             "VK_LAYER_KHRONOS_validation",
@@ -4890,6 +4895,13 @@ static void ggml_vk_instance_init() {
             1,
             &enable_best_practice
         },
+        {
+            "VK_LAYER_KHRONOS_validation",
+            "printf_enable",
+            vk::LayerSettingTypeEXT::eBool32,
+            1,
+            &enable_debug_printf
+        }
     };
     vk::LayerSettingsCreateInfoEXT layer_setting_info(settings);
     vk::InstanceCreateInfo instance_create_info(vk::InstanceCreateFlags{}, &app_info, layers, extensions, &layer_setting_info);
