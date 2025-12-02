@@ -5170,19 +5170,6 @@ static void ggml_vk_instance_init() {
     }
 #endif
 
-    std::vector<vk::ValidationFeatureEnableEXT> features_enable;
-    vk::ValidationFeaturesEXT validation_features;
-
-    if (layer_settings) {
-        features_enable = { vk::ValidationFeatureEnableEXT::eBestPractices };
-        validation_features = {
-            features_enable,
-            {},
-        };
-        validation_features.setPNext(nullptr);
-        instance_create_info.setPNext(&validation_features);
-        GGML_LOG_DEBUG("ggml_vulkan: Validation layers enabled\n");
-    }
     vk_instance.instance = vk::createInstance(instance_create_info);
     vk_instance_initialized = true;
 
