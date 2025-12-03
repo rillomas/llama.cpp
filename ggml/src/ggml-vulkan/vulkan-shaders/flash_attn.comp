@@ -129,10 +129,6 @@ void main() {
             }
             // skip the block if the mask is entirely -inf
             bool all_less = subgroupAll(max_mask <= NEG_FLT_MAX_OVER_2);
-            debugPrintfEXT("Barrier at wg: (%d, %d) local: (%d, %d) sg: %d\n",
-                gl_WorkGroupID.x, gl_WorkGroupID.y,
-                gl_LocalInvocationID.x, gl_LocalInvocationID.y,
-                gl_SubgroupID);
             barrier();
             if (gl_SubgroupInvocationID == 0) {
                 tmpsh[gl_SubgroupID] = all_less ? NEG_FLT_MAX_OVER_2 : 0.0f;
