@@ -48,11 +48,14 @@ static void init_tensor_uniform(ggml_tensor * tensor, float min = -1.0f, float m
         static const size_t n_threads = std::thread::hardware_concurrency();
         // static RNG initialization (revisit if n_threads stops being constant)
         static std::vector<std::default_random_engine> generators = []() {
-            std::random_device rd;
+            unsigned                                seed = 1234567;
+            std::mt19937                            gen(seed);
+            //std::random_device rd;
             std::vector<std::default_random_engine> vec;
             vec.reserve(n_threads);
             //for (size_t i = 0; i < n_threads; i++) { vec.emplace_back(1234 + i); } // fixed seed
-            for (size_t i = 0; i < n_threads; i++) { vec.emplace_back(rd()); }
+            //for (size_t i = 0; i < n_threads; i++) { vec.emplace_back(rd()); }
+            for (size_t i = 0; i < n_threads; i++) { vec.emplace_back(gen); }
             return vec;
         }();
 
