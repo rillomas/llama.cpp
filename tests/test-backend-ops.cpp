@@ -41,12 +41,18 @@
 #include <vector>
 #include <unordered_map>
 
+#ifdef __EMSCRIPTEN__
+#   define N_THREADS 1
+#else
+#   define N_THREADS std::thread::hardware_concurrency()
+#endif
+
 static void init_tensor_uniform(ggml_tensor * tensor, float min = -1.0f, float max = 1.0f) {
     size_t nels = ggml_nelements(tensor);
     std::vector<float> data(nels);
     {
         // parallel initialization
-        static const size_t n_threads = std::thread::hardware_concurrency();
+        static const size_t n_threads = N_THREADS;
         // static RNG initialization (revisit if n_threads stops being constant)
         static std::vector<std::default_random_engine> generators = []() {
             std::random_device rd;
@@ -65,15 +71,19 @@ static void init_tensor_uniform(ggml_tensor * tensor, float min = -1.0f, float m
             }
         };
 
-        std::vector<std::future<void>> tasks;
-        tasks.reserve(n_threads);
-        for (size_t i = 0; i < n_threads; i++) {
-            size_t start =     i*nels/n_threads;
-            size_t end   = (i+1)*nels/n_threads;
-            tasks.push_back(std::async(std::launch::async, init_thread, i, start, end));
-        }
-        for (auto & t : tasks) {
-            t.get();
+        if (n_threads == 1) {
+            init_thread(0, 0, nels);
+        } else {
+            std::vector<std::future<void>> tasks;
+            tasks.reserve(n_threads);
+            for (size_t i = 0; i < n_threads; i++) {
+                size_t start =     i*nels/n_threads;
+                size_t end   = (i+1)*nels/n_threads;
+                tasks.push_back(std::async(std::launch::async, init_thread, i, start, end));
+            }
+            for (auto & t : tasks) {
+                t.get();
+            }
         }
     }
 
@@ -105,17 +115,23 @@ static void init_tensor_uniform(ggml_tensor * tensor, float min = -1.0f, float m
             };
 
             const size_t min_blocks_per_thread = 1;
-            const size_t n_threads = std::min<size_t>(std::thread::hardware_concurrency()/2,
-                                                      std::max<size_t>(1, n_blocks / min_blocks_per_thread));
-            std::vector<std::future<void>> tasks;
-            tasks.reserve(n_threads);
-            for (size_t i = 0; i < n_threads; i++) {
-                size_t start =     i*n_blocks/n_threads;
-                size_t end   = (i+1)*n_blocks/n_threads;
-                tasks.push_back(std::async(std::launch::async, quantize_thread, start, end));
-            }
-            for (auto & t : tasks) {
-                t.get();
+            const size_t n_quant_threads = std::min<size_t>(std::max<size_t>(N_THREADS/2, 1),
+                                                            std::max<size_t>(1, n_blocks / min_blocks_per_thread));
+
+            if (n_quant_threads == 1) {
+                // single-threaded quantization: do all blocks in the current thread
+                quantize_thread(0, n_blocks);
+            } else {
+                std::vector<std::future<void>> tasks;
+                tasks.reserve(n_quant_threads);
+                for (size_t i = 0; i < n_quant_threads; i++) {
+                    size_t start =     i*n_blocks/n_quant_threads;
+                    size_t end   = (i+1)*n_blocks/n_quant_threads;
+                    tasks.push_back(std::async(std::launch::async, quantize_thread, start, end));
+                }
+                for (auto & t : tasks) {
+                    t.get();
+                }
             }
         }
         ggml_backend_tensor_set(tensor, dataq.data(), 0, dataq.size());
@@ -1446,14 +1462,14 @@ struct test_case {
             const uint64_t target_flops_cpu =   8ULL * GFLOP;
             const uint64_t target_flops_gpu = 100ULL * GFLOP;
             uint64_t target_flops = is_cpu ? target_flops_cpu : target_flops_gpu;
-            n_runs = std::min<int>(ggml_graph_size(gf) - ggml_graph_n_nodes(gf), target_flops / op_flops(out)) + 1;
+            n_runs = (int)std::min<int64_t>(ggml_graph_size(gf) - ggml_graph_n_nodes(gf), target_flops / op_flops(out)) + 1;
         } else {
             // based on memory size
             const size_t GB = 1ULL << 30;
             const size_t target_size_cpu =  8 * GB;
             const size_t target_size_gpu = 32 * GB;
             size_t target_size = is_cpu ? target_size_cpu : target_size_gpu;
-            n_runs = std::min<int>(ggml_graph_size(gf) - ggml_graph_n_nodes(gf), target_size / op_size(out)) + 1;
+            n_runs = (int)std::min<int64_t>(ggml_graph_size(gf) - ggml_graph_n_nodes(gf), target_size / op_size(out)) + 1;
         }
 
         // duplicate the op
@@ -7635,6 +7651,14 @@ static std::vector<std::unique_ptr<test_case>> make_test_cases_eval() {
         test_cases.emplace_back(new test_argsort(GGML_TYPE_F32, {2, 8, 8192, 1}, order)); // bailingmoe2 (group selection)
     }
 
+    for (int i = 0; i < 20; ++i) {
+        for (int k : {1, 2, 3, 7, 15, 100, 500, 1023, 9999}) {
+            if (k <= 1<<i) {
+                test_cases.emplace_back(new test_top_k(GGML_TYPE_F32, {(1<<i), 1, 1, 1}, k));
+                test_cases.emplace_back(new test_top_k(GGML_TYPE_F32, {(1<<i) + 11, 1, 2, 1}, k));
+            }
+        }
+    }
     for (int k : {1, 2, 3, 7, 15}) {
         test_cases.emplace_back(new test_top_k(GGML_TYPE_F32, {16, 10, 10, 10}, k));
         test_cases.emplace_back(new test_top_k(GGML_TYPE_F32, {60, 10, 10, 10}, k));
@@ -7652,7 +7676,7 @@ static std::vector<std::unique_ptr<test_case>> make_test_cases_eval() {
     //    test_cases.emplace_back(new test_top_k(GGML_TYPE_F32, {i, 2, 1, 3}, rand() % i + 1));
     //}
 
-    for (ggml_scale_mode mode : {GGML_SCALE_MODE_NEAREST, GGML_SCALE_MODE_BILINEAR, GGML_SCALE_MODE_BICUBIC}) {
+    for (ggml_scale_mode mode : {GGML_SCALE_MODE_NEAREST, GGML_SCALE_MODE_BILINEAR, GGML_SCALE_MODE_BICUBIC, ggml_scale_mode(GGML_SCALE_MODE_BILINEAR | GGML_SCALE_FLAG_ANTIALIAS)}) {
         test_cases.emplace_back(new test_upscale(GGML_TYPE_F32, {512, 512, 3, 2}, 2, mode));
         test_cases.emplace_back(new test_upscale(GGML_TYPE_F32, {512, 512, 3, 2}, 2, mode, true));
         test_cases.emplace_back(new test_interpolate(GGML_TYPE_F32, {2, 5,  7, 11}, {5, 7, 11, 13}, mode));
@@ -7927,6 +7951,9 @@ static std::vector<std::unique_ptr<test_case>> make_test_cases_perf() {
     test_cases.emplace_back(new test_mul_mat(GGML_TYPE_F16, GGML_TYPE_F32, 16416, 1, 128, {8,  1}, {4, 1}, {0, 2, 1, 3}));
     test_cases.emplace_back(new test_mul_mat(GGML_TYPE_F16, GGML_TYPE_F32, 128, 1, 16416, {8,  1}, {4, 1}, {0, 1, 2, 3}, 2*16416));
 
+    test_cases.emplace_back(new test_solve_tri(GGML_TYPE_F32, { 64, 64, 4, 2 }, { 6, 64, 4, 2 }));
+    test_cases.emplace_back(new test_solve_tri(GGML_TYPE_F32, { 128, 128, 4, 1 }, { 8, 128, 4, 1 }));
+
     for (int bs : {1, 2, 3, 4, 5, 8, 512}) {
         for (ggml_type type_a : all_types) {
             for (ggml_type type_b : {GGML_TYPE_F32}) {
@@ -8032,7 +8059,15 @@ static std::vector<std::unique_ptr<test_case>> make_test_cases_perf() {
     }
 
     test_cases.emplace_back(new test_argsort(GGML_TYPE_F32, {65000, 16, 1, 1}));
-    test_cases.emplace_back(new test_top_k(GGML_TYPE_F32, {65000, 16, 1, 1}, 40));
+
+    test_cases.emplace_back(new test_top_k(GGML_TYPE_F32, {2, 1, 1, 1}, 1));
+    for (auto k : {1, 10, 40, 400}) {
+        for (auto nrows : {1, 16}) {
+            for (auto cols : {k, 1000, 65000, 200000}) {
+                test_cases.emplace_back(new test_top_k(GGML_TYPE_F32, {cols, nrows, 1, 1}, k));
+            }
+        }
+    }
 
     return test_cases;
 }
@@ -8344,7 +8379,7 @@ int main(int argc, char ** argv) {
         auto ggml_backend_set_n_threads_fn = (ggml_backend_set_n_threads_t) ggml_backend_reg_get_proc_address(reg, "ggml_backend_set_n_threads");
         if (ggml_backend_set_n_threads_fn) {
             // TODO: better value for n_threads
-            ggml_backend_set_n_threads_fn(backend, std::thread::hardware_concurrency());
+            ggml_backend_set_n_threads_fn(backend, N_THREADS);
         }
 
         size_t free, total;  // NOLINT
