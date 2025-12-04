@@ -138,10 +138,11 @@ void main() {
                 max_mask = max(max_mask, tmpsh[s]);
             }
             if (max_mask <= NEG_FLT_MAX_OVER_2) {
-                debugPrintfEXT("continue at wg: (%d, %d) local: (%d, %d) sg: %d\n",
-                    gl_WorkGroupID.x, gl_WorkGroupID.y,
-                    gl_LocalInvocationID.x, gl_LocalInvocationID.y,
-                    gl_SubgroupID);
+                debugPrintfEXT("continue at wg: (%d, %d, %d) wg size: %dx%dx%d local id: (%d, %d, %d) sg: %d out of %d (size: %d)\n",
+                    gl_WorkGroupID.x, gl_WorkGroupID.y, gl_WorkGroupID.z,
+                    gl_WorkGroupSize.x, gl_WorkGroupID.y, gl_WorkGroupSize.z,
+                    gl_LocalInvocationID.x, gl_LocalInvocationID.y, gl_LocalInvocationID.z,
+                    gl_SubgroupID, gl_NumSubgroups, gl_SubgroupSize);
                 continue;
             }
         }
