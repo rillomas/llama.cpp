@@ -681,7 +681,9 @@ static void llama_model_quantize_impl(const std::string & fname_inp, const std::
             }
             LLAMA_LOG_DEBUG("%s: pruning tensor %s\n", __func__, it.first.c_str());
             continue;
-        } else if (remapped_name != it.first) {
+        }
+
+        if (remapped_name != it.first) {
             ggml_set_name(it.second.tensor, remapped_name.c_str());
             LLAMA_LOG_DEBUG("%s: tensor %s remapped to %s\n", __func__, it.first.c_str(), ggml_get_name(it.second.tensor));
         }
@@ -724,15 +726,19 @@ static void llama_model_quantize_impl(const std::string & fname_inp, const std::
     // sanity checks for models that have attention layers
     if (qs.n_attention_wv != 0 && !is_clip_model)
     {
-        const auto & n_head_kv_iter = model.hparams.n_head_kv_arr.begin();
-        // attention layers have a non-zero number of kv heads
-        int32_t n_attn_layer = model.hparams.n_layer - std::count(n_head_kv_iter, n_head_kv_iter + model.hparams.n_layer, 0);
+        int32_t n_layer_all = model.hparams.n_layer;
         if (llama_model_has_encoder(&model)) {
-            // now n_attn_layer is the number of attention layers in the encoder
+            // now n_layer_all is the number of attention layers in the encoder
             // for each decoder block, there are 2 attention layers
-            n_attn_layer += 2 * model.hparams.dec_n_layer;
+            n_layer_all += 2 * model.hparams.dec_n_layer;
         }
-        GGML_ASSERT((qs.n_attention_wv == n_attn_layer - pruned_attention_w) && "n_attention_wv is unexpected");
+
+        // note: for linear-attention models (such as Qwen3 Next) this is the number of linear layers
+        const int32_t n_layer_recr = std::count(model.hparams.recurrent_layer_arr.begin(), model.hparams.recurrent_layer_arr.end(), true);
+
+        LLAMA_LOG_INFO("%s: n_layer_all = %d, n_layer_recr = %d, pruned_attention_w = %d\n", __func__, n_layer_all, n_layer_recr, pruned_attention_w);
+
+        GGML_ASSERT((qs.n_attention_wv == n_layer_all - pruned_attention_w - n_layer_recr) && "n_attention_wv is unexpected");
     }
 
     size_t total_size_org = 0;
