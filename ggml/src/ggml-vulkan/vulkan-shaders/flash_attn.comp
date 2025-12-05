@@ -144,11 +144,11 @@ void main() {
                 max_mask = max(max_mask, tmpsh[s]);
             }
             if (max_mask <= NEG_FLT_MAX_OVER_2) {
-                debugPrintfEXT("continue at wg: (%u, %u, %u) wg size: %ux%ux%u local id: (%03u, %u, %u) sg: %02u out of %02u, sg id: %02u (size: %u)\n",
-                    gl_WorkGroupID.x, gl_WorkGroupID.y, gl_WorkGroupID.z,
-                    gl_WorkGroupSize.x, gl_WorkGroupSize.y, gl_WorkGroupSize.z,
-                    gl_LocalInvocationID.x, gl_LocalInvocationID.y, gl_LocalInvocationID.z,
-                    gl_SubgroupID, gl_NumSubgroups, gl_SubgroupInvocationID, gl_SubgroupSize);
+                // debugPrintfEXT("continue at wg: (%u, %u, %u) wg size: %ux%ux%u local id: (%03u, %u, %u) sg: %02u out of %02u, sg id: %02u (size: %u)\n",
+                //     gl_WorkGroupID.x, gl_WorkGroupID.y, gl_WorkGroupID.z,
+                //     gl_WorkGroupSize.x, gl_WorkGroupSize.y, gl_WorkGroupSize.z,
+                //     gl_LocalInvocationID.x, gl_LocalInvocationID.y, gl_LocalInvocationID.z,
+                //     gl_SubgroupID, gl_NumSubgroups, gl_SubgroupInvocationID, gl_SubgroupSize);
                 continue;
             }
         }
