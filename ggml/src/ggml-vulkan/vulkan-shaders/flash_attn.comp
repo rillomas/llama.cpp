@@ -8,6 +8,7 @@
 
 #extension GL_KHR_shader_subgroup_shuffle : enable
 #extension GL_KHR_shader_subgroup_vote : enable
+#extension GL_EXT_debug_printf : enable
 
 #include "types.glsl"
 #include "flash_attn_base.glsl"
@@ -46,7 +47,13 @@ void main() {
 #ifdef NEEDS_INIT_IQ_SHMEM
     init_iq_shmem(gl_WorkGroupSize);
 #endif
-
+    // if (gl_WorkGroupID.x == 0 && gl_WorkGroupID.y == 0 && gl_WorkGroupID.z == 0) {
+    //     debugPrintfEXT("wg: (%u, %u, %u) wg size: %ux%ux%u local id: (%03u, %u, %u) sg: %02u out of %02u, sg id: %02u (size: %u)\n",
+    //         gl_WorkGroupID.x, gl_WorkGroupID.y, gl_WorkGroupID.z,
+    //         gl_WorkGroupSize.x, gl_WorkGroupSize.y, gl_WorkGroupSize.z,
+    //         gl_LocalInvocationID.x, gl_LocalInvocationID.y, gl_LocalInvocationID.z,
+    //         gl_SubgroupID, gl_NumSubgroups, gl_SubgroupInvocationID, gl_SubgroupSize);
+    // }
     init_indices();
 
     const uint32_t tid = gl_LocalInvocationIndex;
@@ -137,6 +144,11 @@ void main() {
                 max_mask = max(max_mask, tmpsh[s]);
             }
             if (max_mask <= NEG_FLT_MAX_OVER_2) {
+                // debugPrintfEXT("continue at wg: (%u, %u, %u) wg size: %ux%ux%u local id: (%03u, %u, %u) sg: %02u out of %02u, sg id: %02u (size: %u)\n",
+                //     gl_WorkGroupID.x, gl_WorkGroupID.y, gl_WorkGroupID.z,
+                //     gl_WorkGroupSize.x, gl_WorkGroupSize.y, gl_WorkGroupSize.z,
+                //     gl_LocalInvocationID.x, gl_LocalInvocationID.y, gl_LocalInvocationID.z,
+                //     gl_SubgroupID, gl_NumSubgroups, gl_SubgroupInvocationID, gl_SubgroupSize);
                 continue;
             }
         }
