@@ -5856,7 +5856,6 @@ static void ggml_vk_dispatch_pipeline(ggml_backend_vk_context* ctx, vk_context& 
     const uint32_t wg0 = CEIL_DIV(elements[0], pipeline->wg_denoms[0]);
     const uint32_t wg1 = CEIL_DIV(elements[1], pipeline->wg_denoms[1]);
     const uint32_t wg2 = CEIL_DIV(elements[2], pipeline->wg_denoms[2]);
-    GGML_LOG_INFO("ggml_vk_dispatch_pipeline: %s\n", pipeline->name.c_str());
     VK_LOG_DEBUG("ggml_vk_dispatch_pipeline(" << pipeline->name << ", {";
     for (auto& buffer : descriptor_buffer_infos) {
         std::cerr << "(" << buffer.buffer << ", " << buffer.offset << ", " << buffer.range << "), ";
@@ -5867,7 +5866,8 @@ static void ggml_vk_dispatch_pipeline(ggml_backend_vk_context* ctx, vk_context& 
     GGML_ASSERT(pipeline->parameter_count == descriptor_buffer_infos.size());
     if (pipeline->name == "flash_attn_f32_f16_aligned_f32accf16") {
         static size_t count = 0;
-        GGML_LOG_INFO("here flash_attn_f32_f16_aligned_f32accf16: %02zu\n", count);
+        GGML_LOG_INFO("here flash_attn_f32_f16_aligned_f32accf16 %ux%ux%u: %02zu\n",
+            wg0, wg1, wg2, count);
         count++;
     }
     vk::DescriptorSet& descriptor_set = ctx->descriptor_sets[ctx->descriptor_set_idx++];
