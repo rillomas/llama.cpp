@@ -113,19 +113,21 @@ void main() {
         m_offset = ((iq3 % p.nem3) * p.nem2 + (iq2 % p.nem2)) * p.nem1 * KV;
     }
 
-    if (gl_LocalInvocationID.x == 0 && gl_LocalInvocationID.y == 0 && gl_LocalInvocationID.z == 0) {
-        debugPrintfEXT("start_j: %d, end_j: %d at wg: (%u, %u, %u) wg size: %ux%ux%u local id: (%03u, %u, %u) sg: %02u out of %02u, sg id: %02u (size: %u)\n",
-            start_j, end_j,
-            gl_WorkGroupID.x, gl_WorkGroupID.y, gl_WorkGroupID.z,
-            gl_WorkGroupSize.x, gl_WorkGroupSize.y, gl_WorkGroupSize.z,
-            gl_LocalInvocationID.x, gl_LocalInvocationID.y, gl_LocalInvocationID.z,
-            gl_SubgroupID, gl_NumSubgroups, gl_SubgroupInvocationID, gl_SubgroupSize);
-    }
+    // if (gl_LocalInvocationID.x == 0 && gl_LocalInvocationID.y == 0 && gl_LocalInvocationID.z == 0) {
+    //     debugPrintfEXT("start_j: %d, end_j: %d at wg: (%u, %u, %u) wg size: %ux%ux%u local id: (%03u, %u, %u) sg: %02u out of %02u, sg id: %02u (size: %u)\n",
+    //         start_j, end_j,
+    //         gl_WorkGroupID.x, gl_WorkGroupID.y, gl_WorkGroupID.z,
+    //         gl_WorkGroupSize.x, gl_WorkGroupSize.y, gl_WorkGroupSize.z,
+    //         gl_LocalInvocationID.x, gl_LocalInvocationID.y, gl_LocalInvocationID.z,
+    //         gl_SubgroupID, gl_NumSubgroups, gl_SubgroupInvocationID, gl_SubgroupSize);
+    // }
+
+    bool mask_n_head_log2_mask_enabled = (p.mask_n_head_log2 & MASK_ENABLE_BIT) != 0;
 
     [[dont_unroll]]
     for (uint32_t j = start_j; j < end_j; ++j) {
 
-        if ((p.mask_n_head_log2 & MASK_ENABLE_BIT) != 0) {
+        if (mask_n_head_log2_mask_enabled) {
             bool nem1_bounds_check = !(p.gqa_ratio > 1) && (p.nem1 % Br) != 0;
 
             float max_mask = NEG_FLT_MAX_OVER_2;
@@ -155,13 +157,14 @@ void main() {
                 max_mask = max(max_mask, tmpsh[s]);
             }
             if (max_mask <= NEG_FLT_MAX_OVER_2) {
-                // if (gl_SubgroupInvocationID == 0) {
-                //     debugPrintfEXT("continue at wg: (%u, %u, %u) wg size: %ux%ux%u local id: (%03u, %u, %u) sg: %02u out of %02u, sg id: %02u (size: %u)\n",
-                //         gl_WorkGroupID.x, gl_WorkGroupID.y, gl_WorkGroupID.z,
-                //         gl_WorkGroupSize.x, gl_WorkGroupSize.y, gl_WorkGroupSize.z,
-                //         gl_LocalInvocationID.x, gl_LocalInvocationID.y, gl_LocalInvocationID.z,
-                //         gl_SubgroupID, gl_NumSubgroups, gl_SubgroupInvocationID, gl_SubgroupSize);
-                // }
+                if (gl_WorkGroupID.x == 0 && gl_WorkGroupID.y == 0 && gl_WorkGroupID.z == 0) {
+                    debugPrintfEXT("continue at start_j %d, j %d, end_j %d, wg: (%u, %u, %u) wg size: %ux%ux%u local id: (%03u, %u, %u) sg: %02u out of %02u, sg id: %02u (size: %u)\n",
+                        start_j, j, end_j,
+                        gl_WorkGroupID.x, gl_WorkGroupID.y, gl_WorkGroupID.z,
+                        gl_WorkGroupSize.x, gl_WorkGroupSize.y, gl_WorkGroupSize.z,
+                        gl_LocalInvocationID.x, gl_LocalInvocationID.y, gl_LocalInvocationID.z,
+                        gl_SubgroupID, gl_NumSubgroups, gl_SubgroupInvocationID, gl_SubgroupSize);
+                }
                 continue;
             }
         }
@@ -210,7 +213,7 @@ void main() {
             }
         }
 
-        if ((p.mask_n_head_log2 & MASK_ENABLE_BIT) != 0) {
+        if (mask_n_head_log2_mask_enabled) {
             [[unroll]] for (uint32_t c = 0; c < cols_per_thread; ++c) {
                 [[unroll]] for (uint32_t r = 0; r < Br; ++r) {
                     float mvf = masksh[c * cols_per_iter + col_tid][r];
