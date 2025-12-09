@@ -120,7 +120,8 @@ void main() {
             bool nem1_bounds_check = !(p.gqa_ratio > 1) && (p.nem1 % Br) != 0;
 
             float max_mask = NEG_FLT_MAX_OVER_2;
-            [[unroll]] for (uint32_t idx = 0; idx < Bc * Br; idx += gl_WorkGroupSize.x) {
+            // [[unroll]]
+            for (uint32_t idx = 0; idx < Bc * Br; idx += gl_WorkGroupSize.x) {
                 uint32_t c = (idx + tid) % Bc;
                 uint32_t r = (idx + tid) / Bc;
                 if (idx + tid < Bc * Br) {
@@ -140,7 +141,8 @@ void main() {
                 tmpsh[gl_SubgroupID] = all_less ? NEG_FLT_MAX_OVER_2 : 0.0f;
             }
             barrier();
-            [[unroll]] for (uint s = 0; s < gl_NumSubgroups; ++s) {
+            // [[unroll]]
+            for (uint s = 0; s < gl_NumSubgroups; ++s) {
                 max_mask = max(max_mask, tmpsh[s]);
             }
             if (max_mask <= NEG_FLT_MAX_OVER_2) {

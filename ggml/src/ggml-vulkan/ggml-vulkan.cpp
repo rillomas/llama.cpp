@@ -5865,8 +5865,10 @@ static void ggml_vk_dispatch_pipeline(ggml_backend_vk_context* ctx, vk_context& 
     GGML_ASSERT(ctx->descriptor_set_idx < ctx->descriptor_sets.size());
     GGML_ASSERT(descriptor_buffer_infos.size() <= MAX_PARAMETER_COUNT);
     GGML_ASSERT(pipeline->parameter_count == descriptor_buffer_infos.size());
-    if (pipeline->name == "mul_mat_vec_q8_0_q8_1_f32") {
-        GGML_LOG_INFO("here mul_mat_vec_q8_0_q8_1_f32\n");
+    if (pipeline->name == "flash_attn_f32_f16_aligned_f32accf16") {
+        static size_t count = 0;
+        GGML_LOG_INFO("here flash_attn_f32_f16_aligned_f32accf16: %02zu\n", count);
+        count++;
     }
     vk::DescriptorSet& descriptor_set = ctx->descriptor_sets[ctx->descriptor_set_idx++];
     vk::WriteDescriptorSet write_descriptor_set{ descriptor_set, 0, 0, pipeline->parameter_count, vk::DescriptorType::eStorageBuffer, nullptr, descriptor_buffer_infos.begin() };
