@@ -158,7 +158,7 @@ void main() {
             }
             if (max_mask <= NEG_FLT_MAX_OVER_2) {
                 if (gl_WorkGroupID.x == 0 && gl_WorkGroupID.y == 0 && gl_WorkGroupID.z == 0) {
-                    debugPrintfEXT("continue at start_j %d, j %d, end_j %d, wg: (%u, %u, %u) wg size: %ux%ux%u local id: (%03u, %u, %u) sg: %02u out of %02u, sg id: %02u (size: %u)\n",
+                    debugPrintfEXT("continue at start_j %u, j %u, end_j %u, wg: (%u, %u, %u) wg size: %ux%ux%u local id: (%03u, %u, %u) sg: %02u out of %02u, sg id: %02u (size: %u)\n",
                         start_j, j, end_j,
                         gl_WorkGroupID.x, gl_WorkGroupID.y, gl_WorkGroupID.z,
                         gl_WorkGroupSize.x, gl_WorkGroupSize.y, gl_WorkGroupSize.z,
