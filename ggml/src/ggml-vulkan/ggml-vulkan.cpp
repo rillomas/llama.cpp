@@ -12138,6 +12138,7 @@ static void ggml_vk_compute_forward(ggml_backend_vk_context * ctx, ggml_cgraph *
 
     // Only run if ctx hasn't been submitted yet
     if (!subctx->seqs.empty()) {
+        GGML_LOG_INFO("ggml_vk_compute_forward: %s\n", ggml_op_name(tensor->op));
 #ifdef GGML_VULKAN_CHECK_RESULTS
         ggml_vk_check_results_0(ctx, cgraph, tensor_idx);
 #endif
@@ -12158,6 +12159,7 @@ static void ggml_vk_compute_forward(ggml_backend_vk_context * ctx, ggml_cgraph *
             ggml_vk_submit(subctx, {});
         }
         ctx->submit_pending = true;
+        ggml_vk_synchronize(ctx);
 
 #ifdef GGML_VULKAN_CHECK_RESULTS
         ggml_vk_synchronize(ctx);
