@@ -284,7 +284,7 @@ void main() {
         barrier();
     }
 
-    // barrier();
+    barrier();
 
     // reduce across threads
 
