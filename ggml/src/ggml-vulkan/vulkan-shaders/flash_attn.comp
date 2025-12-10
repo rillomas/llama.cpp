@@ -284,6 +284,8 @@ void main() {
         barrier();
     }
 
+    // barrier();
+
     // reduce across threads
 
     [[unroll]] for (uint32_t r = 0; r < Br; ++r) {

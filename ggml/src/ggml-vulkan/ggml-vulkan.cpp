@@ -5864,12 +5864,12 @@ static void ggml_vk_dispatch_pipeline(ggml_backend_vk_context* ctx, vk_context& 
     GGML_ASSERT(ctx->descriptor_set_idx < ctx->descriptor_sets.size());
     GGML_ASSERT(descriptor_buffer_infos.size() <= MAX_PARAMETER_COUNT);
     GGML_ASSERT(pipeline->parameter_count == descriptor_buffer_infos.size());
-    if (pipeline->name == "flash_attn_f32_f16_aligned_f32accf16") {
-        static size_t count = 0;
-        GGML_LOG_INFO("here flash_attn_f32_f16_aligned_f32accf16 %ux%ux%u: %02zu\n",
-            wg0, wg1, wg2, count);
-        count++;
-    }
+    // if (pipeline->name == "flash_attn_f32_f16_aligned_f32accf16") {
+    //     static size_t count = 0;
+    //     GGML_LOG_INFO("here flash_attn_f32_f16_aligned_f32accf16 %ux%ux%u: %02zu\n",
+    //         wg0, wg1, wg2, count);
+    //     count++;
+    // }
     vk::DescriptorSet& descriptor_set = ctx->descriptor_sets[ctx->descriptor_set_idx++];
     vk::WriteDescriptorSet write_descriptor_set{ descriptor_set, 0, 0, pipeline->parameter_count, vk::DescriptorType::eStorageBuffer, nullptr, descriptor_buffer_infos.begin() };
     ctx->device->device.updateDescriptorSets({ write_descriptor_set }, {});
@@ -12140,7 +12140,7 @@ static void ggml_vk_compute_forward(ggml_backend_vk_context * ctx, ggml_cgraph *
 
     // Only run if ctx hasn't been submitted yet
     if (!subctx->seqs.empty()) {
-        GGML_LOG_INFO("ggml_vk_compute_forward: %s\n", ggml_op_name(tensor->op));
+        // GGML_LOG_INFO("ggml_vk_compute_forward: %s\n", ggml_op_name(tensor->op));
 #ifdef GGML_VULKAN_CHECK_RESULTS
         ggml_vk_check_results_0(ctx, cgraph, tensor_idx);
 #endif
@@ -12161,7 +12161,7 @@ static void ggml_vk_compute_forward(ggml_backend_vk_context * ctx, ggml_cgraph *
             ggml_vk_submit(subctx, {});
         }
         ctx->submit_pending = true;
-        ggml_vk_synchronize(ctx);
+        // ggml_vk_synchronize(ctx);
 
 #ifdef GGML_VULKAN_CHECK_RESULTS
         ggml_vk_synchronize(ctx);
@@ -13100,7 +13100,7 @@ static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cg
     // Estimate the amount of matmul work by looking at the weight matrix size, and submit every 100MB
     // (and scaled down based on model size, so smaller models submit earlier).
     // Also submit at least every 100 nodes, in case there are workloads without as much matmul.
-    int nodes_per_submit = 1;
+    int nodes_per_submit = 100;
     int submitted_nodes = 0;
     int submit_count = 0;
     uint64_t mul_mat_bytes = 0;
