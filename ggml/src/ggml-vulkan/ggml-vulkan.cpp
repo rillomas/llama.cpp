@@ -1965,7 +1965,7 @@ static void ggml_vk_create_pipeline_func(vk_device& device, vk_pipeline& pipelin
 
     vk::ComputePipelineCreateInfo compute_pipeline_create_info(
         device->pipeline_executable_properties_support ?
-            vk::PipelineCreateFlagBits::eCaptureStatisticsKHR :
+            vk::PipelineCreateFlagBits::eCaptureInternalRepresentationsKHR | vk::PipelineCreateFlagBits::eCaptureStatisticsKHR :
             vk::PipelineCreateFlags{},
         pipeline_shader_create_info,
         pipeline->layout);
@@ -1996,15 +1996,46 @@ static void ggml_vk_create_pipeline_func(vk_device& device, vk_pipeline& pipelin
     }
 
     if (device->pipeline_executable_properties_support) {
-        vk::PipelineExecutableInfoKHR executableInfo;
-        executableInfo.pipeline = pipeline->pipeline;
+        vk::PipelineInfoKHR pipe_info(pipeline->pipeline);
+        auto exec_props = device->device.getPipelineExecutablePropertiesKHR(pipe_info);
+        VK_LOG_DEBUG(pipeline->name << " Executables: " << exec_props.size());
+        for (size_t i = 0; i < exec_props.size(); ++i) {
+            vk::PipelineExecutableInfoKHR executableInfo(pipeline->pipeline, i);
 
-        auto statistics = device->device.getPipelineExecutableStatisticsKHR(executableInfo);
-        for (auto & s : statistics) {
-            // "Register Count" is reported by NVIDIA drivers.
-            if (strcmp(s.name, "Register Count") == 0) {
-                VK_LOG_DEBUG(pipeline->name << " " << s.name << ": " << s.value.u64 << " registers");
-                pipeline->register_count = (uint32_t)s.value.u64;
+            auto statistics = device->device.getPipelineExecutableStatisticsKHR(executableInfo);
+            for (auto & s : statistics) {
+                // "Register Count" is reported by NVIDIA drivers.
+                if (strcmp(s.name, "Register Count") == 0) {
+                    VK_LOG_DEBUG(pipeline->name << " " << s.name << ": " << s.value.u64 << " registers");
+                    pipeline->register_count = (uint32_t)s.value.u64;
+                } else if (strcmp(s.name, "Instruction Count") == 0) {
+                    VK_LOG_DEBUG(pipeline->name << " " << s.name << ": " << s.value.u64);
+                } else if (strcmp(s.name, "Basic Block Count") == 0) {
+                    VK_LOG_DEBUG(pipeline->name << " " << s.name << ": " << s.value.u64);
+                } else if (strcmp(s.name, "Scratch Memory Size") == 0) {
+                    VK_LOG_DEBUG(pipeline->name << " " << s.name << ": " << s.value.u64);
+                } else if (strcmp(s.name, "Loop Count") == 0) {
+                    VK_LOG_DEBUG(pipeline->name << " " << s.name << ": " << s.value.u64);
+                } else if (strcmp(s.name, "Workgroup Memory Size") == 0) {
+                    VK_LOG_DEBUG(pipeline->name << " " << s.name << ": " << s.value.u64);
+                }
+            }
+
+            auto irs = device->device.getPipelineExecutableInternalRepresentationsKHR(executableInfo);
+            for (size_t i = 0; i < irs.size(); ++i) {
+                const auto &ir = irs[i];
+                VK_LOG_DEBUG("      name: " << ir.name);
+                VK_LOG_DEBUG("      desc: " << ir.description);
+                VK_LOG_DEBUG("      isText: " << (ir.isText ? "yes" : "no"));
+                VK_LOG_DEBUG("      data size: " << ir.dataSize);
+                if (ir.isText && !ir.dataSize > 0) {
+                    // Print as text
+                    VK_LOG_DEBUG("------ BEGIN IR (" << ir.name << ") ------");
+                    //VK_LOG_DEBUG(reinterpret_cast<const char*>(blobs[i].data()), static_cast<std::streamsize>(ir.dataSize));
+                    VK_LOG_DEBUG("\n------ END IR (" << ir.name << ") --------");
+                } else if (ir.dataSize > 0) {
+                    // Dump blob to file
+                }
             }
         }
     }
@@ -4574,6 +4605,7 @@ static vk_device ggml_vk_get_device(size_t idx) {
 
         VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR pep_features {};
         pep_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR;
+        pep_features.pipelineExecutableInfo = true;
         if (pipeline_executable_properties_support) {
             last_struct->pNext = (VkBaseOutStructure *)&pep_features;
             last_struct = (VkBaseOutStructure *)&pep_features;
