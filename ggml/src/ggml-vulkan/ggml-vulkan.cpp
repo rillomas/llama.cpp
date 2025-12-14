@@ -2021,9 +2021,50 @@ static void ggml_vk_create_pipeline_func(vk_device& device, vk_pipeline& pipelin
                 }
             }
 
-            auto irs = device->device.getPipelineExecutableInternalRepresentationsKHR(executableInfo);
-            for (size_t i = 0; i < irs.size(); ++i) {
-                const auto &ir = irs[i];
+            uint32_t count = 0;
+            auto result = device->device.getPipelineExecutableInternalRepresentationsKHR(&executableInfo, &count, nullptr);
+            if (result != vk::Result::eSuccess) {
+                VK_LOG_DEBUG("getPipelineExecutableInternalRepresentationsKHR failed at index: " << i);
+                continue;
+            } else if (count == 0) {
+                VK_LOG_DEBUG("No internal representations available for at index: " << i);
+                continue;
+            }
+            std::vector<vk::PipelineExecutableInternalRepresentationKHR> representations(count);
+            for (auto& rep : representations) {
+                rep.sType = vk::StructureType::ePipelineExecutableInternalRepresentationKHR;
+            }
+
+            result = device->device.getPipelineExecutableInternalRepresentationsKHR(
+                &executableInfo,
+                &count,
+                representations.data()
+            );
+            if (result != vk::Result::eSuccess) {
+                VK_LOG_DEBUG("getPipelineExecutableInternalRepresentationsKHR failed at index: " << i);
+                continue;
+            }
+            std::vector<std::vector<uint8_t>> actualDatas(count);
+            for (size_t i = 0; i < count; ++i) {
+                auto& rep = representations[i];
+                if (rep.dataSize > 0) {
+                    actualDatas[i].resize(rep.dataSize);
+                    rep.pData = actualDatas[i].data();
+                }
+            }
+
+            result = device->device.getPipelineExecutableInternalRepresentationsKHR(
+                &executableInfo,
+                &count,
+                representations.data()
+            );
+
+            if (result != vk::Result::eSuccess) {
+                VK_LOG_DEBUG("getPipelineExecutableInternalRepresentationsKHR failed at index: " << i);
+                continue;
+            }
+            for (size_t i = 0; i < count; ++i) {
+                const auto &ir = representations[i];
                 VK_LOG_DEBUG("      name: " << ir.name);
                 VK_LOG_DEBUG("      desc: " << ir.description);
                 VK_LOG_DEBUG("      isText: " << (ir.isText ? "yes" : "no"));
