@@ -221,7 +221,7 @@ static int ggml_metal_op_encode_impl(ggml_metal_op_t ctx, int idx) {
         }
 
         if (ctx->debug_graph > 0) {
-            GGML_LOG_DEBUG("%s: node[%5d] - %-12s %s\n", __func__, idx, ggml_op_name(node->op), is_concurrent ? "(concurrent)" : "");
+            GGML_LOG_DEBUG("%s: node[%5d] - %-12s %-12s %s\n", __func__, idx, ggml_op_name(node->op), ggml_get_name(node), is_concurrent ? "(concurrent)" : "");
         }
         if (ctx->debug_graph > 1) {
             GGML_TENSOR_LOCALS( int64_t, ne0, node->src[0], ne);
@@ -448,7 +448,11 @@ static int ggml_metal_op_encode_impl(ggml_metal_op_t ctx, int idx) {
             {
                 n_fuse = ggml_metal_op_opt_step_sgd(ctx, idx);
             } break;
-       default:
+        case GGML_OP_COUNT_EQUAL:
+            {
+                n_fuse = ggml_metal_op_count_equal(ctx, idx);
+            } break;
+        default:
             {
                 GGML_LOG_ERROR("%s: error: node %3d, op = %8s not implemented\n", __func__, idx, ggml_op_name(node->op));
                 GGML_ABORT("fatal error");
@@ -1365,15 +1369,43 @@ int ggml_metal_op_ssm_conv(ggml_metal_op_t ctx, int idx) {
         /*.nb2  =*/ nb2,
     };
 
-    auto pipeline = ggml_metal_library_get_pipeline_ssm_conv(lib, op);
+    // Use batched kernel for prefill (ne1 > 1) to reduce threadgroup dispatch overhead
+    const bool use_batched = (ne1 > 1);
 
-    ggml_metal_encoder_set_pipeline(enc, pipeline);
-    ggml_metal_encoder_set_bytes(enc, &args, sizeof(args), 0);
-    ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(op->src[0]), 1);
-    ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(op->src[1]), 2);
-    ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(op),         3);
+    if (use_batched) {
+        // Determine the smallest power of 2 that's >= ne1, but <= 256
+        int BATCH_SIZE;
+        if      (ne1 > 128) BATCH_SIZE = 256;
+        else if (ne1 > 64 ) BATCH_SIZE = 128;
+        else if (ne1 > 32 ) BATCH_SIZE = 64;
+        else if (ne1 > 16 ) BATCH_SIZE = 32;
+        else if (ne1 > 8  ) BATCH_SIZE = 16;
+        else if (ne1 > 4  ) BATCH_SIZE = 8;
+        else                BATCH_SIZE = 2;
 
-    ggml_metal_encoder_dispatch_threadgroups(enc, ne01, ne1, ne02, 1, 1, 1);
+        auto pipeline = ggml_metal_library_get_pipeline_ssm_conv_batched(lib, op, BATCH_SIZE);
+
+        ggml_metal_encoder_set_pipeline(enc, pipeline);
+        ggml_metal_encoder_set_bytes(enc, &args, sizeof(args), 0);
+        ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(op->src[0]), 1);
+        ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(op->src[1]), 2);
+        ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(op),         3);
+
+        // Dispatch: ne01 rows, ceil(ne1/BATCH_SIZE) token batches, ne02 sequences
+        // Each threadgroup has BATCH_SIZE threads, each handling one token
+        const int n_token_batches = (ne1 + BATCH_SIZE - 1) / BATCH_SIZE;
+        ggml_metal_encoder_dispatch_threadgroups(enc, ne01, n_token_batches, ne02, BATCH_SIZE, 1, 1);
+    } else {
+        auto pipeline = ggml_metal_library_get_pipeline_ssm_conv(lib, op);
+
+        ggml_metal_encoder_set_pipeline(enc, pipeline);
+        ggml_metal_encoder_set_bytes(enc, &args, sizeof(args), 0);
+        ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(op->src[0]), 1);
+        ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(op->src[1]), 2);
+        ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(op),         3);
+
+        ggml_metal_encoder_dispatch_threadgroups(enc, ne01, ne1, ne02, 1, 1, 1);
+    }
 
     return 1;
 }
@@ -2149,7 +2181,11 @@ size_t ggml_metal_op_flash_attn_ext_extra_pad(const ggml_tensor * op) {
 
     const bool has_mask = op->src[3] != nullptr;
 
-    if (ggml_metal_op_flash_attn_ext_use_vec(op)) {
+    // note: the non-vec kernel requires more extra memory, so always reserve for it
+    GGML_ASSERT(OP_FLASH_ATTN_EXT_NCPSG >= OP_FLASH_ATTN_EXT_VEC_NCPSG);
+
+    //if (ggml_metal_op_flash_attn_ext_use_vec(op)) {
+    if (false) {
         // note: always reserve the padding space to avoid graph reallocations
         //const bool has_kvpad = ne11 % OP_FLASH_ATTN_EXT_VEC_NCPSG != 0;
         const bool has_kvpad = true;
@@ -4059,6 +4095,67 @@ int ggml_metal_op_opt_step_sgd(ggml_metal_op_t ctx, int idx) {
     const int64_t n = (np + nth - 1) / nth;
 
     ggml_metal_encoder_dispatch_threadgroups(enc, n, 1, 1, nth, 1, 1);
+
+    return 1;
+}
+
+int ggml_metal_op_count_equal(ggml_metal_op_t ctx, int idx) {
+    ggml_tensor * op = ctx->node(idx);
+
+    ggml_metal_library_t lib = ctx->lib;
+    ggml_metal_encoder_t enc = ctx->enc;
+
+    GGML_TENSOR_LOCALS(int32_t,  ne0, op->src[0], ne);
+    GGML_TENSOR_LOCALS(uint64_t, nb0, op->src[0], nb);
+    GGML_TENSOR_LOCALS(uint64_t, nb1, op->src[1], nb);
+
+    {
+        ggml_metal_kargs_memset args = { /*.val =*/ 0 };
+
+        auto pipeline = ggml_metal_library_get_pipeline_memset(lib, op);
+
+        ggml_metal_encoder_set_pipeline(enc, pipeline);
+        ggml_metal_encoder_set_bytes(enc, &args, sizeof(args), 0);
+        ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(op), 1);
+
+        ggml_metal_encoder_dispatch_threadgroups(enc, 1, 1, 1, 1, 1, 1);
+    }
+
+    ggml_metal_op_concurrency_reset(ctx);
+
+    {
+        ggml_metal_kargs_count_equal args = {
+            /*.ne00 =*/ ne00,
+            /*.ne01 =*/ ne01,
+            /*.ne02 =*/ ne02,
+            /*.ne03 =*/ ne03,
+            /*.nb00 =*/ nb00,
+            /*.nb01 =*/ nb01,
+            /*.nb02 =*/ nb02,
+            /*.nb03 =*/ nb03,
+            /*.nb10 =*/ nb10,
+            /*.nb11 =*/ nb11,
+            /*.nb12 =*/ nb12,
+            /*.nb13 =*/ nb13,
+        };
+
+        auto pipeline = ggml_metal_library_get_pipeline_count_equal(lib, op);
+
+        const size_t smem = pipeline.smem;
+
+        const int nth = 32*pipeline.nsg;
+
+        GGML_ASSERT(nth <= ggml_metal_pipeline_max_theads_per_threadgroup(pipeline));
+
+        ggml_metal_encoder_set_pipeline(enc, pipeline);
+        ggml_metal_encoder_set_bytes(enc, &args, sizeof(args), 0);
+        ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(op->src[0]), 1);
+        ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(op->src[1]), 2);
+        ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(op), 3);
+
+        ggml_metal_encoder_set_threadgroup_memory_size(enc, smem, 0);
+        ggml_metal_encoder_dispatch_threadgroups(enc, ne01, ne02, ne03, nth, 1, 1);
+    }
 
     return 1;
 }
