@@ -8,6 +8,7 @@
 
 #extension GL_KHR_shader_subgroup_shuffle : enable
 #extension GL_KHR_shader_subgroup_vote : enable
+#extension GL_EXT_debug_printf : enable
 
 #include "types.glsl"
 #include "flash_attn_base.glsl"
@@ -46,7 +47,13 @@ void main() {
 #ifdef NEEDS_INIT_IQ_SHMEM
     init_iq_shmem(gl_WorkGroupSize);
 #endif
-
+    // if (gl_WorkGroupID.x == 0 && gl_WorkGroupID.y == 0 && gl_WorkGroupID.z == 0) {
+    //     debugPrintfEXT("wg: (%u, %u, %u) wg size: %ux%ux%u local id: (%03u, %u, %u) sg: %02u out of %02u, sg id: %02u (size: %u)\n",
+    //         gl_WorkGroupID.x, gl_WorkGroupID.y, gl_WorkGroupID.z,
+    //         gl_WorkGroupSize.x, gl_WorkGroupSize.y, gl_WorkGroupSize.z,
+    //         gl_LocalInvocationID.x, gl_LocalInvocationID.y, gl_LocalInvocationID.z,
+    //         gl_SubgroupID, gl_NumSubgroups, gl_SubgroupInvocationID, gl_SubgroupSize);
+    // }
     init_indices();
 
     const uint32_t tid = gl_LocalInvocationIndex;
@@ -106,10 +113,21 @@ void main() {
         m_offset = ((iq3 % p.nem3) * p.nem2 + (iq2 % p.nem2)) * p.nem1 * KV;
     }
 
+    // if (gl_LocalInvocationID.x == 0 && gl_LocalInvocationID.y == 0 && gl_LocalInvocationID.z == 0) {
+    //     debugPrintfEXT("start_j: %d, end_j: %d at wg: (%u, %u, %u) wg size: %ux%ux%u local id: (%03u, %u, %u) sg: %02u out of %02u, sg id: %02u (size: %u)\n",
+    //         start_j, end_j,
+    //         gl_WorkGroupID.x, gl_WorkGroupID.y, gl_WorkGroupID.z,
+    //         gl_WorkGroupSize.x, gl_WorkGroupSize.y, gl_WorkGroupSize.z,
+    //         gl_LocalInvocationID.x, gl_LocalInvocationID.y, gl_LocalInvocationID.z,
+    //         gl_SubgroupID, gl_NumSubgroups, gl_SubgroupInvocationID, gl_SubgroupSize);
+    // }
+
+    bool mask_n_head_log2_mask_enabled = (p.mask_n_head_log2 & MASK_ENABLE_BIT) != 0;
+
     [[dont_unroll]]
     for (uint32_t j = start_j; j < end_j; ++j) {
 
-        if ((p.mask_n_head_log2 & MASK_ENABLE_BIT) != 0) {
+        if (mask_n_head_log2_mask_enabled) {
             bool nem1_bounds_check = !(p.gqa_ratio > 1) && (p.nem1 % Br) != 0;
 
             float max_mask = NEG_FLT_MAX_OVER_2;
@@ -137,6 +155,14 @@ void main() {
                 max_mask = max(max_mask, tmpsh[s]);
             }
             if (max_mask <= NEG_FLT_MAX_OVER_2) {
+                // if (gl_WorkGroupID.x == 0 && gl_WorkGroupID.y == 0 && gl_WorkGroupID.z == 0) {
+                //     debugPrintfEXT("continue at start_j %u, j %u, end_j %u, wg: (%u, %u, %u) wg size: %ux%ux%u local id: (%03u, %u, %u) sg: %02u out of %02u, sg id: %02u (size: %u)\n",
+                //         start_j, j, end_j,
+                //         gl_WorkGroupID.x, gl_WorkGroupID.y, gl_WorkGroupID.z,
+                //         gl_WorkGroupSize.x, gl_WorkGroupSize.y, gl_WorkGroupSize.z,
+                //         gl_LocalInvocationID.x, gl_LocalInvocationID.y, gl_LocalInvocationID.z,
+                //         gl_SubgroupID, gl_NumSubgroups, gl_SubgroupInvocationID, gl_SubgroupSize);
+                // }
                 continue;
             }
         }
@@ -185,7 +211,7 @@ void main() {
             }
         }
 
-        if ((p.mask_n_head_log2 & MASK_ENABLE_BIT) != 0) {
+        if (mask_n_head_log2_mask_enabled) {
             [[unroll]] for (uint32_t c = 0; c < cols_per_thread; ++c) {
                 [[unroll]] for (uint32_t r = 0; r < Br; ++r) {
                     float mvf = masksh[c * cols_per_iter + col_tid][r];
