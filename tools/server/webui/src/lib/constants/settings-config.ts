@@ -3,6 +3,7 @@ export const SETTING_CONFIG_DEFAULT: Record<string, string | number | boolean> =
 	// Do not use nested objects, keep it single level. Prefix the key if you need to group them.
 	apiKey: '',
 	systemMessage: '',
+	showSystemMessage: true,
 	theme: 'system',
 	showThoughtInProgress: false,
 	showToolCalls: false,
@@ -11,12 +12,16 @@ export const SETTING_CONFIG_DEFAULT: Record<string, string | number | boolean> =
 	showMessageStats: true,
 	askForTitleConfirmation: false,
 	pasteLongTextToFileLen: 2500,
+	copyTextAttachmentsAsPlainText: false,
 	pdfAsImage: false,
 	disableAutoScroll: false,
 	renderUserContentAsMarkdown: false,
+	alwaysShowSidebarOnDesktop: false,
+	autoShowSidebarOnNewChat: true,
 	autoMicOnEmpty: false,
 	// make sure these default values are in sync with `common.h`
 	samplers: 'top_k;typ_p;top_p;min_p;temperature',
+	backend_sampling: false,
 	temperature: 0.8,
 	dynatemp_range: 0.0,
 	dynatemp_exponent: 1.0,
@@ -42,14 +47,19 @@ export const SETTING_CONFIG_DEFAULT: Record<string, string | number | boolean> =
 };
 
 export const SETTING_CONFIG_INFO: Record<string, string> = {
-	apiKey: 'Set the API Key if you are using --api-key option for the server.',
+	apiKey: 'Set the API Key if you are using <code>--api-key</code> option for the server.',
 	systemMessage: 'The starting message that defines how model should behave.',
+	showSystemMessage: 'Display the system message at the top of each conversation.',
 	theme:
 		'Choose the color theme for the interface. You can choose between System (follows your device settings), Light, or Dark.',
 	pasteLongTextToFileLen:
 		'On pasting long text, it will be converted to a file. You can control the file length by setting the value of this parameter. Value 0 means disable.',
+	copyTextAttachmentsAsPlainText:
+		'When copying a message with text attachments, combine them into a single plain text string instead of a special format that can be pasted back as attachments.',
 	samplers:
 		'The order at which samplers are applied, in simplified way. Default is "top_k;typ_p;top_p;min_p;temperature": top_k->typ_p->top_p->min_p->temperature',
+	backend_sampling:
+		'Enable backend-based samplers. When enabled, supported samplers run on the accelerator backend for faster sampling.',
 	temperature:
 		'Controls the randomness of the generated text by affecting the probability distribution of the output tokens. Higher = more random, lower = more focused.',
 	dynatemp_range:
@@ -94,6 +104,10 @@ export const SETTING_CONFIG_INFO: Record<string, string> = {
 	disableAutoScroll:
 		'Disable automatic scrolling while messages stream so you can control the viewport position manually.',
 	renderUserContentAsMarkdown: 'Render user messages using markdown formatting in the chat.',
+	alwaysShowSidebarOnDesktop:
+		'Always keep the sidebar visible on desktop instead of auto-hiding it.',
+	autoShowSidebarOnNewChat:
+		'Automatically show sidebar when starting a new chat. Disable to keep the sidebar hidden until you click on it.',
 	autoMicOnEmpty:
 		'Automatically show microphone button instead of send button when textarea is empty for models with audio modality support.',
 	pyInterpreterEnabled:

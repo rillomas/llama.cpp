@@ -1,10 +1,10 @@
 #include "common.h"
+#include "download.h"
 #include "log.h"
 #include "llama.h"
 #include "mtmd.h"
 #include "mtmd-helper.h"
 #include "chat.h"
-#include "arg.h" // for common_remote_get_content; TODO: use download.h only
 #include "base64.hpp"
 
 #include "server-common.h"
@@ -115,26 +115,14 @@ bool lora_should_clear_cache(
         !lora_all_alora(next));
 }
 
-std::vector<common_adapter_lora_info> parse_lora_request(
-        const std::vector<common_adapter_lora_info> & lora_base,
-        const json & data) {
-    std::vector<common_adapter_lora_info> lora(lora_base);
-    int max_idx = lora.size();
-
-    // clear existing value
-    for (auto & entry : lora) {
-        entry.scale = 0.0f;
-    }
+std::map<int, float> parse_lora_request(const json & data) {
+    std::map<int, float> lora;
 
     // set value
     for (const auto & entry : data) {
         int id      = json_value(entry, "id", -1);
         float scale = json_value(entry, "scale", 0.0f);
-        if (0 <= id && id < max_idx) {
-            lora[id].scale = scale;
-        } else {
-            throw std::runtime_error("invalid adapter id");
-        }
+        lora[id] = scale;
     }
 
     return lora;
@@ -494,6 +482,18 @@ int32_t server_tokens::process_chunk(
     return 0;
 }
 
+server_tokens server_tokens::clone() const {
+    server_tokens res;
+    res.has_mtmd = has_mtmd;
+    res.tokens   = tokens;
+    for (auto it = map_idx_to_media.begin(); it != map_idx_to_media.end(); ++it) {
+        size_t idx = it->first;
+        const mtmd::input_chunk_ptr & chunk = it->second;
+        res.map_idx_to_media[idx] = mtmd::input_chunk_ptr(mtmd_input_chunk_copy(chunk.get()));
+    }
+    return res;
+}
+
 //
 // tokenizer and input processing utils
 //
@@ -745,12 +745,6 @@ json oaicompat_completion_params_parse(const json & body) {
         llama_params["stop"] = json_value(body, "stop", json::array());
     }
 
-    // Handle "n" field
-    int n_choices = json_value(body, "n", 1);
-    if (n_choices != 1) {
-        throw std::runtime_error("Only one completion choice is allowed");
-    }
-
     // Handle "echo" field
     if (json_value(body, "echo", false)) {
         throw std::runtime_error("Only no echo is supported");
@@ -785,7 +779,7 @@ static void handle_media(
         // download remote image
         // TODO @ngxson : maybe make these params configurable
         common_remote_params params;
-        params.headers.push_back("User-Agent: llama.cpp/" + build_info);
+        params.headers.push_back({"User-Agent", "llama.cpp/" + build_info});
         params.max_size = 1024 * 1024 * 10; // 10MB
         params.timeout  = 10; // seconds
         SRV_INF("downloading image from '%s'\n", url.c_str());
@@ -966,6 +960,9 @@ json oaicompat_chat_params_parse(
     inputs.parallel_tool_calls   = json_value(body, "parallel_tool_calls", false);
     inputs.add_generation_prompt = json_value(body, "add_generation_prompt", true);
     inputs.reasoning_format      = opt.reasoning_format;
+    if (body.contains("reasoning_format")) {
+        inputs.reasoning_format = common_reasoning_format_from_name(body.at("reasoning_format").get<std::string>());
+    }
     inputs.enable_thinking       = opt.enable_thinking;
     if (!inputs.tools.empty() && inputs.tool_choice != COMMON_CHAT_TOOL_CHOICE_NONE) {
         if (body.contains("grammar")) {
@@ -1047,12 +1044,6 @@ json oaicompat_chat_params_parse(
     }
     if (!chat_params.parser.empty()) {
         llama_params["chat_parser"] = chat_params.parser;
-    }
-
-    // Handle "n" field
-    int n_choices = json_value(body, "n", 1);
-    if (n_choices != 1) {
-        throw std::invalid_argument("Only one completion choice is allowed");
     }
 
     // Handle "logprobs" field
@@ -1394,16 +1385,21 @@ json format_response_rerank(
 
 std::vector<llama_token_data> get_token_probabilities(llama_context * ctx, int idx) {
     std::vector<llama_token_data> cur;
+
     const auto * logits = llama_get_logits_ith(ctx, idx);
+    const llama_token * sampled_ids = llama_get_sampled_candidates_ith(ctx, idx);
 
-    const llama_model * model = llama_get_model(ctx);
-    const llama_vocab * vocab = llama_model_get_vocab(model);
+    const int n_logits = llama_get_sampled_logits_count_ith(ctx, idx);
 
-    const int n_vocab = llama_vocab_n_tokens(vocab);
-
-    cur.resize(n_vocab);
-    for (llama_token token_id = 0; token_id < n_vocab; token_id++) {
-        cur[token_id] = llama_token_data{token_id, logits[token_id], 0.0f};
+    cur.resize(n_logits);
+    if (sampled_ids) {
+        for (int i = 0; i < n_logits; i++) {
+            cur[i] = llama_token_data{sampled_ids[i], logits[i], 0.0f};
+        }
+    } else {
+        for (llama_token token_id = 0; token_id < n_logits; token_id++) {
+            cur[token_id] = llama_token_data{token_id, logits[token_id], 0.0f};
+        }
     }
 
     // sort tokens by logits
@@ -1432,7 +1428,7 @@ std::string safe_json_to_str(const json & data) {
 
 // TODO: reuse llama_detokenize
 template <class Iter>
-static std::string tokens_to_str(llama_context * ctx, Iter begin, Iter end) {
+static std::string tokens_to_str(const llama_vocab * ctx, Iter begin, Iter end) {
     std::string ret;
     for (; begin != end; ++begin) {
         ret += common_token_to_piece(ctx, *begin);
@@ -1442,7 +1438,12 @@ static std::string tokens_to_str(llama_context * ctx, Iter begin, Iter end) {
 }
 
 std::string tokens_to_str(llama_context * ctx, const llama_tokens & tokens) {
-    return tokens_to_str(ctx, tokens.begin(), tokens.end());
+    auto model = llama_get_model(ctx);
+    return tokens_to_str(llama_model_get_vocab(model), tokens.begin(), tokens.end());
+}
+
+std::string tokens_to_str(const llama_vocab * vocab, const llama_tokens & tokens) {
+    return tokens_to_str(vocab, tokens.begin(), tokens.end());
 }
 
 // format incomplete utf-8 multibyte character for output

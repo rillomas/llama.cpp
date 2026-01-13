@@ -150,19 +150,38 @@ We also have a [guide](./backend/CUDA-FEDORA.md) for setting up CUDA toolkit in 
 
 
 ### Compilation
+
+Make sure to read the notes about the CPU build for general instructions for e.g. speeding up the compilation.
+
 ```bash
 cmake -B build -DGGML_CUDA=ON
 cmake --build build --config Release
 ```
 
+### Non-Native Builds
+
+By default llama.cpp will be built for the hardware that is connected to the system at that time.
+For a build covering all CUDA GPUs, disable `GGML_NATIVE`:
+
+```bash
+cmake -B build -DGGML_CUDA=ON -DGGML_NATIVE=OFF
+```
+
+The resulting binary should run on all CUDA GPUs with optimal performance, though some just-in-time compilation may be required.
+
 ### Override Compute Capability Specifications
 
-If `nvcc` cannot detect your gpu, you may get compile-warnings such as:
+If `nvcc` cannot detect your gpu, you may get compile warnings such as:
  ```text
 nvcc warning : Cannot find valid GPU for '-arch=native', default arch is used
 ```
 
-To override the `native` GPU detection:
+One option is to do a non-native build as described above.
+However, this will result in a large binary that takes a long time to compile.
+Alternatively it is also possible to explicitly specify CUDA architectures.
+This may also make sense for a non-native build, for that one should look at the logic in `ggml/src/ggml-cuda/CMakeLists.txt` as a starting point.
+
+To override the default CUDA architectures:
 
 #### 1. Take note of the `Compute Capability` of your NVIDIA devices: ["CUDA: Your GPU Compute > Capability"](https://developer.nvidia.com/cuda-gpus).
 
@@ -494,6 +513,38 @@ llama_new_context_with_model:       CANN compute buffer size =  1260.81 MiB
 ```
 
 For detailed info, such as model/device supports, CANN install, please refer to [llama.cpp for CANN](./backend/CANN.md).
+
+## ZenDNN
+
+ZenDNN provides optimized deep learning primitives for AMD EPYC™ CPUs. It accelerates matrix multiplication operations for inference workloads.
+
+### Compilation
+
+- Using `CMake` on Linux (automatic build):
+
+    ```bash
+    cmake -B build -DGGML_ZENDNN=ON
+    cmake --build build --config Release
+    ```
+
+    The first build will automatically download and build ZenDNN, which may take 5-10 minutes. Subsequent builds will be much faster.
+
+- Using `CMake` with custom ZenDNN installation:
+
+    ```bash
+    cmake -B build -DGGML_ZENDNN=ON -DZENDNN_ROOT=/path/to/zendnn/install
+    cmake --build build --config Release
+    ```
+
+### Testing
+
+You can test with:
+
+```bash
+./build/bin/llama-cli -m PATH_TO_MODEL -p "Building a website can be done in 10 steps:" -n 50
+```
+
+For detailed information about hardware support, setup instructions, and performance optimization, refer to [llama.cpp for ZenDNN](./backend/ZenDNN.md).
 
 ## Arm® KleidiAI™
 KleidiAI is a library of optimized microkernels for AI workloads, specifically designed for Arm CPUs. These microkernels enhance performance and can be enabled for use by the CPU backend.

@@ -86,10 +86,10 @@ export class ChatService {
 			dry_penalty_last_n,
 			// Other parameters
 			samplers,
+			backend_sampling,
 			custom,
 			timings_per_token,
 			// Config options
-			systemMessage,
 			disableReasoningFormat
 		} = options;
 
@@ -103,6 +103,7 @@ export class ChatService {
 				}
 			})
 			.filter((msg) => {
+				// Filter out empty system messages
 				if (msg.role === 'system') {
 					const content = typeof msg.content === 'string' ? msg.content : '';
 
@@ -112,14 +113,13 @@ export class ChatService {
 				return true;
 			});
 
-		const processedMessages = ChatService.injectSystemMessage(normalizedMessages, systemMessage);
-
 		const requestBody: ApiChatCompletionRequest = {
-			messages: processedMessages.map((msg: ApiChatMessageData) => ({
+			messages: normalizedMessages.map((msg: ApiChatMessageData) => ({
 				role: msg.role,
 				content: msg.content
 			})),
-			stream
+			stream,
+			return_progress: stream ? true : undefined
 		};
 
 		// Include model in request if provided (required in ROUTER mode)
@@ -159,6 +159,8 @@ export class ChatService {
 					? samplers.split(';').filter((s: string) => s.trim())
 					: samplers;
 		}
+
+		if (backend_sampling !== undefined) requestBody.backend_sampling = backend_sampling;
 
 		if (timings_per_token !== undefined) requestBody.timings_per_token = timings_per_token;
 
@@ -273,7 +275,7 @@ export class ChatService {
 		onReasoningChunk?: (chunk: string) => void,
 		onToolCallChunk?: (chunk: string) => void,
 		onModel?: (model: string) => void,
-		onTimings?: (timings: ChatMessageTimings, promptProgress?: ChatMessagePromptProgress) => void,
+		onTimings?: (timings?: ChatMessageTimings, promptProgress?: ChatMessagePromptProgress) => void,
 		conversationId?: string,
 		abortSignal?: AbortSignal
 	): Promise<void> {
@@ -368,11 +370,13 @@ export class ChatService {
 								onModel?.(chunkModel);
 							}
 
-							if (timings || promptProgress) {
+							if (promptProgress) {
+								ChatService.notifyTimings(undefined, promptProgress, onTimings);
+							}
+
+							if (timings) {
 								ChatService.notifyTimings(timings, promptProgress, onTimings);
-								if (timings) {
-									lastTimings = timings;
-								}
+								lastTimings = timings;
 							}
 
 							if (content) {
@@ -678,46 +682,6 @@ export class ChatService {
 	// ─────────────────────────────────────────────────────────────────────────────
 
 	/**
-	 * Injects a system message at the beginning of the conversation if provided.
-	 * Checks for existing system messages to avoid duplication.
-	 *
-	 * @param messages - Array of chat messages to process
-	 * @param systemMessage - Optional system message to inject
-	 * @returns Array of messages with system message injected at the beginning if provided
-	 * @private
-	 */
-	private static injectSystemMessage(
-		messages: ApiChatMessageData[],
-		systemMessage?: string
-	): ApiChatMessageData[] {
-		const trimmedSystemMessage = systemMessage?.trim();
-
-		if (!trimmedSystemMessage) {
-			return messages;
-		}
-
-		if (messages.length > 0 && messages[0].role === 'system') {
-			if (messages[0].content !== trimmedSystemMessage) {
-				const updatedMessages = [...messages];
-				updatedMessages[0] = {
-					role: 'system',
-					content: trimmedSystemMessage
-				};
-				return updatedMessages;
-			}
-
-			return messages;
-		}
-
-		const systemMsg: ApiChatMessageData = {
-			role: 'system',
-			content: trimmedSystemMessage
-		};
-
-		return [systemMsg, ...messages];
-	}
-
-	/**
 	 * Parses error response and creates appropriate error with context information
 	 * @param response - HTTP response object
 	 * @returns Promise<Error> - Parsed error with context info if available
@@ -810,10 +774,11 @@ export class ChatService {
 		timings: ChatMessageTimings | undefined,
 		promptProgress: ChatMessagePromptProgress | undefined,
 		onTimingsCallback:
-			| ((timings: ChatMessageTimings, promptProgress?: ChatMessagePromptProgress) => void)
+			| ((timings?: ChatMessageTimings, promptProgress?: ChatMessagePromptProgress) => void)
 			| undefined
 	): void {
-		if (!timings || !onTimingsCallback) return;
+		if (!onTimingsCallback || (!timings && !promptProgress)) return;
+
 		onTimingsCallback(timings, promptProgress);
 	}
 }
