@@ -2837,16 +2837,18 @@ static bool ggml_vk_matmul_shmem_support(const vk_device& device, const std::vec
     return supported;
 }
 
+// Pipeline configuration for a specific pipeline
 struct PipelineConfigParameter {
-    // Subgroup size used for a specific pipeline
     uint32_t subgroup_size;
     // Specialization constants used for a specific pipeline.
     // If empty we use the default.
     // Some kernels must have matching values between subgroup size and
-    // specilization constants so we have an interface to override the default here.
+    // specialization constants so we have an interface to override the default here.
     std::vector<uint32_t> specialization_constants;
 };
 
+// Pipeline configuration for a target GPU.
+// This may contain a group of piplines
 struct GpuPipelineConfig {
     // GPU architecture identifier.
     // Example: vk_device_architecture::AMD_GCN
@@ -2930,25 +2932,32 @@ static void init_gpu_pipeline_configs(std::vector<GpuPipelineConfig>& config) {
     });
 }
 
-static uint32_t get_subgroup_size(const std::vector<GpuPipelineConfig>& pipeline_configs, const std::string &pipeline_name, const vk_device_architecture &arch) {
-    for (const auto &config : pipeline_configs) {
+static bool get_gpu_pipeline_config(GpuPipelineConfig* output, const std::vector<GpuPipelineConfig>& pipeline_configs, const vk_device_architecture& arch) {
+    for (const auto & config : pipeline_configs) {
         if (config.arch == arch) {
-            auto pipIt = config.pipelines.find(pipeline_name);
-            if (pipIt != config.pipelines.end()) {
-                return pipIt->second.subgroup_size;
-            }
-            std::vector<std::pair<std::string, PipelineConfigParameter>> sorted_pipelines(config.pipelines.begin(), config.pipelines.end());
-            std::sort(sorted_pipelines.begin(), sorted_pipelines.end(),
-                      [](const auto &a, const auto &b) { return a.first.size() > b.first.size(); });
-            for (const auto &entry : sorted_pipelines) {
-                if (pipeline_name.find(entry.first) != std::string::npos) {
-                    return entry.second.subgroup_size;
-                }
-            }
-            return config.default_subgroup_size;
+            *output = config;
+            return true;
         }
     }
-    return 0; // If no matching configuration is found
+    return false;
+}
+
+static bool get_pipeline_config_parameter(PipelineConfigParameter* output, const GpuPipelineConfig& config, const std::string &pipeline_name) {
+    auto pipIt = config.pipelines.find(pipeline_name);
+    if (pipIt != config.pipelines.end()) {
+        *output = pipIt->second;
+        return true;
+    }
+    std::vector<std::pair<std::string, PipelineConfigParameter>> sorted_pipelines(config.pipelines.begin(), config.pipelines.end());
+    std::sort(sorted_pipelines.begin(), sorted_pipelines.end(),
+                [](const auto &a, const auto &b) { return a.first.size() > b.first.size(); });
+    for (const auto &entry : sorted_pipelines) {
+        if (pipeline_name.find(entry.first) != std::string::npos) {
+            *output = entry.second;
+            return true;
+        }
+    }
+    return false;
 }
 
 static void ggml_vk_load_shaders(vk_device& device) {
@@ -3144,8 +3153,30 @@ static void ggml_vk_load_shaders(vk_device& device) {
             std::cout << "here" << std::endl;
         }
 
+        // Override subgroup size and specialization constant based on pipeline name
+        GpuPipelineConfig gpu_config = {};
+        PipelineConfigParameter pipeline_param = {};
+        bool param_found = false;
+        auto gpu_config_found = get_gpu_pipeline_config(&gpu_config, gpu_pipeline_configs, device->architecture);
+        if (gpu_config_found) {
+            param_found = get_pipeline_config_parameter(&pipeline_param, gpu_config, std::string(name));
+        }
+
         if (required_subgroup_size == 0) {
-            required_subgroup_size = get_subgroup_size(gpu_pipeline_configs, name, device->architecture);
+            // No requirement in subgroup size so we can override it
+            if (param_found) {
+                // set specific subgroup size for this pipeline
+                required_subgroup_size = pipeline_param.subgroup_size;
+            } else if (!param_found && gpu_config_found) {
+                // no specific parameter for this pipeline so set the default
+                required_subgroup_size = gpu_config.default_subgroup_size;
+            }
+        }
+
+        // We always override the specialization constant if a matching pipline name exists with valid parameters
+        std::vector<uint32_t> target_specilization_constants = specialization_constants;
+        if (param_found && !pipeline_param.specialization_constants.empty()) {
+            target_specilization_constants = pipeline_param.specialization_constants;
         }
 
         vk_pipeline *ptr = &base_pipeline;
@@ -3188,8 +3219,9 @@ static void ggml_vk_load_shaders(vk_device& device) {
                 compile_count++;
             }
 
+
             compiles.push_back(std::async(ggml_vk_create_pipeline_func, std::ref(device), std::ref(pipeline), spv_size, spv_data, entrypoint,
-                                          parameter_count, wg_denoms, specialization_constants, disable_robustness, require_full_subgroups, required_subgroup_size));
+                                          parameter_count, wg_denoms, target_specilization_constants, disable_robustness, require_full_subgroups, required_subgroup_size));
         }
     };
 
@@ -5414,7 +5446,12 @@ static void ggml_vk_print_gpu_info(size_t idx) {
     bool bf16 = false;
 #endif
 
-    uint32_t default_subgroup_size = get_subgroup_size(gpu_pipeline_configs, "", device_architecture);
+    uint32_t default_subgroup_size = 0;
+    GpuPipelineConfig gpu_config = {};
+    auto config_found = get_gpu_pipeline_config(&gpu_config, gpu_pipeline_configs, device_architecture);
+    if (config_found) {
+        default_subgroup_size = gpu_config.default_subgroup_size;
+    }
     const size_t subgroup_size = (default_subgroup_size != 0) ? default_subgroup_size : subgroup_props.subgroupSize;
     const bool uma = props2.properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu;
 
