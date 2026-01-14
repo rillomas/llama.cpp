@@ -2028,6 +2028,10 @@ static void ggml_vk_create_pipeline_func(vk_device& device, vk_pipeline& pipelin
     GGML_ASSERT(parameter_count <= MAX_PARAMETER_COUNT);
     GGML_ASSERT(wg_denoms[0] > 0 && wg_denoms[1] > 0 && wg_denoms[2] > 0); // NOLINT
 
+    if (pipeline->name == "matmul_id_subgroup_q4_k_f32_f16acc_aligned_l") {
+        std::cout << "here" << std::endl;
+    }
+
     vk::ShaderModuleCreateInfo shader_module_create_info({}, spv_size, reinterpret_cast<const uint32_t *>(spv_data));
     pipeline->shader_module = device->device.createShaderModule(shader_module_create_info);
 
@@ -2833,14 +2837,24 @@ static bool ggml_vk_matmul_shmem_support(const vk_device& device, const std::vec
     return supported;
 }
 
+struct PipelineConfigParameter {
+    // Subgroup size used for a specific pipeline
+    uint32_t subgroup_size;
+    // Specialization constants used for a specific pipeline.
+    // If empty we use the default.
+    // Some kernels must have matching values between subgroup size and
+    // specilization constants so we have an interface to override the default here.
+    std::vector<uint32_t> specialization_constants;
+};
+
 struct GpuPipelineConfig {
     // GPU architecture identifier.
     // Example: vk_device_architecture::AMD_GCN
     vk_device_architecture arch;
 
-    // Mapping of pipeline names to their specific subgroup sizes.
-    // Example: {"soft_max_f32", 64}
-    std::unordered_map<std::string, uint32_t> pipelines;
+    // Mapping of pipeline names to their specific configuration parameters.
+    // Example: {"soft_max_f32", {64, {}}
+    std::unordered_map<std::string, PipelineConfigParameter> pipelines;
 
     // Default subgroup size for this GPU.
     // Defaults to 0 if not explicitly provided.
@@ -2848,71 +2862,87 @@ struct GpuPipelineConfig {
 };
 
 // Pipeline configuration for RDNA1 GPUs.
-static const std::unordered_map<std::string, uint32_t> rdna1_pipelines = {
-    {"soft_max", 64}, {"im2col", 64},
-    {"argmax", 64}, {"mul_mat_vec", 64},
-    {"mul_mat_vec_f16", 32}, {"mul_mat_vec_f32_f16", 32}
+static const std::unordered_map<std::string, PipelineConfigParameter> rdna1_pipelines = {
+    {"soft_max",            {64, {}}},
+    {"im2col",              {64, {}}},
+    {"argmax",              {64, {}}},
+    {"mul_mat_vec",         {64, {}}},
+    {"mul_mat_vec_f16",     {32, {}}},
+    {"mul_mat_vec_f32_f16", {32, {}}},
 };
 
 // Pipeline configuration for RDNA2 GPUs.
-static const std::unordered_map<std::string, uint32_t> rdna2_pipelines = {
-    {"soft_max", 64}, {"im2col", 64},
+static const std::unordered_map<std::string, PipelineConfigParameter> rdna2_pipelines = {
+    {"soft_max", {64, {}}},
+    {"im2col",   {64, {}}},
 };
 
 static constexpr uint32_t RDNA_DEFAULT_SUBGROUP_SIZE = 32;
 
-static const std::unordered_map<std::string, uint32_t> xe2_onward_pipelines = {
-    {"matmul_id_subgroup_q4_k_f32_f16acc_aligned_m", 16},
-    {"matmul_id_subgroup_q6_k_f32_f16acc_aligned_m", 16},
+static const std::unordered_map<std::string, PipelineConfigParameter> xe2_onward_pipelines = {
+    {"matmul_id_subgroup_q4_k_f32_f16acc_aligned_m", {16, {}}},
+    {"matmul_id_subgroup_q4_k_f32_f16acc_aligned_l", {16, {}}},
+    {"matmul_id_subgroup_q6_k_f32_f16acc_aligned_m", {16, {}}},
+    {"matmul_id_subgroup_q6_k_f32_f16acc_aligned_l", {16, {}}},
 };
+
 // Intel GPU can use subgroup 8, 16, or 32 depending on architeture.
 // Pre-Xe2 is 8, 16, or 32. Xe2 onward is 16 or 32. 32 is the default if nothing is specified.
 static constexpr uint32_t INTEL_DEFAULT_SUBGROUP_SIZE = 32;
 
 // Define configurations for different GPUs.
-static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {
-    {
-        vk_device_architecture::AMD_RDNA1,
-        {
-            rdna1_pipelines,
-        },
-        RDNA_DEFAULT_SUBGROUP_SIZE
-    },
-    {
-        vk_device_architecture::AMD_RDNA2,
-        {
-            rdna2_pipelines,
-        },
-        RDNA_DEFAULT_SUBGROUP_SIZE
-    },
-    {
-        vk_device_architecture::INTEL_PRE_XE2,
-        {
-        },
-        INTEL_DEFAULT_SUBGROUP_SIZE
-    },
-    {
-        vk_device_architecture::INTEL_XE2_ONWARD,
-        {
-            xe2_onward_pipelines,
-        },
-        INTEL_DEFAULT_SUBGROUP_SIZE
-    },
-};
+static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {};
 
-static uint32_t get_subgroup_size(const std::string &pipeline_name, const vk_device_architecture &arch) {
-    for (const auto &config : gpu_pipeline_configs) {
+// Initialize vendor/pipeline specific parameters to be used when creating pipelines
+static void init_gpu_pipeline_configs(std::vector<GpuPipelineConfig>& config) {
+    if (!config.empty()) {
+        // Already setup
+        return;
+    }
+    config.insert(config.end(),{
+        {
+            vk_device_architecture::AMD_RDNA1,
+            {
+                rdna1_pipelines,
+            },
+            RDNA_DEFAULT_SUBGROUP_SIZE
+        },
+        {
+            vk_device_architecture::AMD_RDNA2,
+            {
+                rdna2_pipelines,
+            },
+            RDNA_DEFAULT_SUBGROUP_SIZE
+        },
+        {
+            vk_device_architecture::INTEL_PRE_XE2,
+            {
+            },
+            INTEL_DEFAULT_SUBGROUP_SIZE
+        },
+        {
+            vk_device_architecture::INTEL_XE2_ONWARD,
+            {
+                xe2_onward_pipelines,
+            },
+            INTEL_DEFAULT_SUBGROUP_SIZE
+        }
+    });
+}
+
+static uint32_t get_subgroup_size(const std::vector<GpuPipelineConfig>& pipeline_configs, const std::string &pipeline_name, const vk_device_architecture &arch) {
+    for (const auto &config : pipeline_configs) {
         if (config.arch == arch) {
             auto pipIt = config.pipelines.find(pipeline_name);
             if (pipIt != config.pipelines.end()) {
-                return pipIt->second;
+                return pipIt->second.subgroup_size;
             }
-            std::vector<std::pair<std::string, uint32_t>> sorted_pipelines(config.pipelines.begin(), config.pipelines.end());
+            std::vector<std::pair<std::string, PipelineConfigParameter>> sorted_pipelines(config.pipelines.begin(), config.pipelines.end());
             std::sort(sorted_pipelines.begin(), sorted_pipelines.end(),
                       [](const auto &a, const auto &b) { return a.first.size() > b.first.size(); });
             for (const auto &entry : sorted_pipelines) {
                 if (pipeline_name.find(entry.first) != std::string::npos) {
-                    return entry.second;
+                    return entry.second.subgroup_size;
                 }
             }
             return config.default_subgroup_size;
@@ -3110,9 +3140,12 @@ static void ggml_vk_load_shaders(vk_device& device) {
     auto const &ggml_vk_create_pipeline = [&](vk_device& device, vk_pipeline& base_pipeline, const char *name, size_t spv_size, const void* spv_data, const char *entrypoint,
                                               uint32_t parameter_count, uint32_t push_constant_size, std::array<uint32_t, 3> wg_denoms, const std::vector<uint32_t>& specialization_constants,
                                               uint32_t align, bool disable_robustness = false, bool require_full_subgroups = false, uint32_t required_subgroup_size = 0) {
+        if (std::string(name) == "matmul_id_subgroup_q4_k_f32_f16acc_aligned_l") {
+            std::cout << "here" << std::endl;
+        }
 
         if (required_subgroup_size == 0) {
-            required_subgroup_size = get_subgroup_size(name, device->architecture);
+            required_subgroup_size = get_subgroup_size(gpu_pipeline_configs, name, device->architecture);
         }
 
         vk_pipeline *ptr = &base_pipeline;
@@ -5381,7 +5414,7 @@ static void ggml_vk_print_gpu_info(size_t idx) {
     bool bf16 = false;
 #endif
 
-    uint32_t default_subgroup_size = get_subgroup_size("", device_architecture);
+    uint32_t default_subgroup_size = get_subgroup_size(gpu_pipeline_configs, "", device_architecture);
     const size_t subgroup_size = (default_subgroup_size != 0) ? default_subgroup_size : subgroup_props.subgroupSize;
     const bool uma = props2.properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu;
 
@@ -5633,6 +5666,7 @@ static void ggml_vk_instance_init() {
     }
     GGML_LOG_DEBUG("ggml_vulkan: Found %zu Vulkan devices:\n", vk_instance.device_indices.size());
 
+    init_gpu_pipeline_configs(gpu_pipeline_configs);
     for (size_t i = 0; i < vk_instance.device_indices.size(); i++) {
         vk::PhysicalDevice vkdev = devices[vk_instance.device_indices[i]];
         std::vector<vk::ExtensionProperties> extensionprops = vkdev.enumerateDeviceExtensionProperties();
