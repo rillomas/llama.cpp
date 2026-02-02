@@ -12744,8 +12744,13 @@ static void ggml_vk_compute_forward(ggml_backend_vk_context * ctx, ggml_cgraph *
 
     vk_context subctx = ctx->tensor_ctxs[tensor_idx].lock();
 
+    //if (tensor->op == GGML_OP_RMS_NORM) {
+    //    std::cout << "here" << std::endl;
+    //}
+
     // Only run if ctx hasn't been submitted yet
     if (!subctx->seqs.empty()) {
+         GGML_LOG_INFO("ggml_vk_compute_forward: %s\n", ggml_op_name(tensor->op));
 #ifdef GGML_VULKAN_CHECK_RESULTS
         ggml_vk_check_results_0(ctx, cgraph, tensor_idx);
 #endif
@@ -12766,7 +12771,7 @@ static void ggml_vk_compute_forward(ggml_backend_vk_context * ctx, ggml_cgraph *
             ggml_vk_submit(subctx, {});
         }
         ctx->submit_pending = true;
-
+        ggml_vk_synchronize(ctx);
 #ifdef GGML_VULKAN_CHECK_RESULTS
         ggml_vk_synchronize(ctx);
         ggml_vk_check_results_1(ctx, cgraph, tensor_idx);
@@ -13760,7 +13765,7 @@ static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cg
     // Estimate the amount of matmul work by looking at the weight matrix size, and submit every 100MB
     // (and scaled down based on model size, so smaller models submit earlier).
     // Also submit at least every 100 nodes, in case there are workloads without as much matmul.
-    int nodes_per_submit = 100;
+    int nodes_per_submit = 1;
     int submitted_nodes = 0;
     int submit_count = 0;
     uint64_t mul_mat_bytes = 0;
