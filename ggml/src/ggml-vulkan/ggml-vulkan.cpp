@@ -12744,13 +12744,16 @@ static void ggml_vk_compute_forward(ggml_backend_vk_context * ctx, ggml_cgraph *
 
     vk_context subctx = ctx->tensor_ctxs[tensor_idx].lock();
 
-    //if (tensor->op == GGML_OP_RMS_NORM) {
-    //    std::cout << "here" << std::endl;
-    //}
-
     // Only run if ctx hasn't been submitted yet
     if (!subctx->seqs.empty()) {
-         GGML_LOG_INFO("ggml_vk_compute_forward: %s\n", ggml_op_name(tensor->op));
+        if (tensor->op == GGML_OP_FLASH_ATTN_EXT) {
+            static size_t counter=0;
+            counter++;
+            GGML_LOG_INFO("ggml_vk_compute_forward: %s (%zu)\n", ggml_op_name(tensor->op), counter);
+        }
+        else {
+            GGML_LOG_INFO("ggml_vk_compute_forward: %s\n", ggml_op_name(tensor->op));
+        }
 #ifdef GGML_VULKAN_CHECK_RESULTS
         ggml_vk_check_results_0(ctx, cgraph, tensor_idx);
 #endif
