@@ -45,6 +45,7 @@ sd=`dirname $0`
 cd $sd/../
 SRC=`pwd`
 
+GENERATOR=()
 CMAKE_EXTRA="-DLLAMA_FATAL_WARNINGS=${LLAMA_FATAL_WARNINGS:-ON} -DLLAMA_OPENSSL=OFF -DGGML_SCHED_NO_REALLOC=ON"
 
 if [ ! -z ${GG_BUILD_METAL} ]; then
@@ -100,6 +101,12 @@ if [ ! -z ${GG_BUILD_VULKAN} ]; then
     # if on Mac, disable METAL
     if [[ "$OSTYPE" == "darwin"* ]]; then
         CMAKE_EXTRA="${CMAKE_EXTRA} -DGGML_METAL=OFF -DGGML_BLAS=OFF"
+    fi
+
+    # If on Windows use MinGW (assuming Visual Studio is not installed)
+    if [[ "$OSTYPE" == "msys"* ]]; then
+        CMAKE_EXTRA="${CMAKE_EXTRA} -DBUILD_SHARED_LIBS=ON"
+        GENERATOR=(-G "MinGW Makefiles")
     fi
 
 fi
@@ -219,7 +226,7 @@ function gg_run_ctest_debug {
     # Check cmake, make and ctest are installed
     gg_check_build_requirements
 
-    (time cmake -DCMAKE_BUILD_TYPE=Debug ${CMAKE_EXTRA} .. ) 2>&1 | tee -a $OUT/${ci}-cmake.log
+    (time cmake -DCMAKE_BUILD_TYPE=Debug "${GENERATOR[@]}" ${CMAKE_EXTRA} .. ) 2>&1 | tee -a $OUT/${ci}-cmake.log
     (time make -j$(nproc)                                  ) 2>&1 | tee -a $OUT/${ci}-make.log
 
     (time ctest --output-on-failure -L main -E "test-opt|test-backend-ops" ) 2>&1 | tee -a $OUT/${ci}-ctest.log
@@ -250,7 +257,7 @@ function gg_run_ctest_release {
     # Check cmake, make and ctest are installed
     gg_check_build_requirements
 
-    (time cmake -DCMAKE_BUILD_TYPE=Release ${CMAKE_EXTRA} .. ) 2>&1 | tee -a $OUT/${ci}-cmake.log
+    (time cmake -DCMAKE_BUILD_TYPE=Release "${GENERATOR[@]}" ${CMAKE_EXTRA} .. ) 2>&1 | tee -a $OUT/${ci}-cmake.log
     (time make -j$(nproc)                                    ) 2>&1 | tee -a $OUT/${ci}-make.log
 
     if [ -z ${GG_BUILD_LOW_PERF} ]; then
@@ -381,7 +388,7 @@ function gg_run_qwen3_0_6b {
 
     set -e
 
-    (time cmake -DCMAKE_BUILD_TYPE=Release ${CMAKE_EXTRA} .. ) 2>&1 | tee -a $OUT/${ci}-cmake.log
+    (time cmake -DCMAKE_BUILD_TYPE=Release "${GENERATOR[@]}" ${CMAKE_EXTRA} .. ) 2>&1 | tee -a $OUT/${ci}-cmake.log
     (time make -j$(nproc)                                    ) 2>&1 | tee -a $OUT/${ci}-make.log
 
     python3 ../convert_hf_to_gguf.py ${path_models} --outfile ${path_models}/ggml-model-f16.gguf  --outtype f16
@@ -530,7 +537,7 @@ function gg_run_embd_bge_small {
 
     set -e
 
-    (time cmake -DCMAKE_BUILD_TYPE=Release ${CMAKE_EXTRA} .. ) 2>&1 | tee -a $OUT/${ci}-cmake.log
+    (time cmake -DCMAKE_BUILD_TYPE=Release "${GENERATOR[@]}" ${CMAKE_EXTRA} .. ) 2>&1 | tee -a $OUT/${ci}-cmake.log
     (time make -j$(nproc)                                    ) 2>&1 | tee -a $OUT/${ci}-make.log
 
     python3 ../convert_hf_to_gguf.py ${path_models} --outfile ${path_models}/ggml-model-f16.gguf
@@ -575,7 +582,7 @@ function gg_run_rerank_tiny {
 
     set -e
 
-    (time cmake -DCMAKE_BUILD_TYPE=Release ${CMAKE_EXTRA} .. ) 2>&1 | tee -a $OUT/${ci}-cmake.log
+    (time cmake -DCMAKE_BUILD_TYPE=Release "${GENERATOR[@]}" ${CMAKE_EXTRA} .. ) 2>&1 | tee -a $OUT/${ci}-cmake.log
     (time make -j$(nproc)                                    ) 2>&1 | tee -a $OUT/${ci}-make.log
 
     python3 ../convert_hf_to_gguf.py ${path_models} --outfile ${path_models}/ggml-model-f16.gguf
