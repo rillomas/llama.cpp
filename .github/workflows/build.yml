@@ -1728,8 +1728,8 @@ jobs:
           vulkaninfo --summary
           GG_BUILD_VULKAN=1 bash ./ci/run.sh ~/results/llama.cpp ~/mnt/llama.cpp
 
-  ggml-ci-x64-linux-intel-vulkan-xe2:
-    runs-on: [self-hosted, Linux, X64, Intel, Xe2]
+  ggml-ci-x64-linux-intel-vulkan:
+    runs-on: [self-hosted, Linux, X64, Intel]
 
     steps:
       - name: Clone
