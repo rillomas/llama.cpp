@@ -1728,6 +1728,20 @@ jobs:
           vulkaninfo --summary
           GG_BUILD_VULKAN=1 bash ./ci/run.sh ~/results/llama.cpp ~/mnt/llama.cpp
 
+  ggml-ci-x64-intel-vulkan-xe2:
+    runs-on: [self-hosted, Linux, X64, Intel, Xe2]
+
+    steps:
+      - name: Clone
+        id: checkout
+        uses: actions/checkout@v6
+
+      - name: Test
+        id: ggml-ci
+        run: |
+          vulkaninfo --summary
+          GG_BUILD_VULKAN=1 bash ./ci/run.sh ~/results/llama.cpp ~/mnt/llama.cpp
+
   ggml-ci-arm64-cpu-kleidiai:
      runs-on: ubuntu-22.04-arm
 
