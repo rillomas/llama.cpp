@@ -221,7 +221,7 @@ subprocess_weak int subprocess_alive(struct subprocess_s *const process);
 #define SUBPROCESS_CAST(type, x) static_cast<type>(x)
 #define SUBPROCESS_PTR_CAST(type, x) reinterpret_cast<type>(x)
 #define SUBPROCESS_CONST_CAST(type, x) const_cast<type>(x)
-#define SUBPROCESS_NULL NULL
+#define SUBPROCESS_NULL 0
 #else
 #define SUBPROCESS_CAST(type, x) ((type)(x))
 #define SUBPROCESS_PTR_CAST(type, x) ((type)(x))
