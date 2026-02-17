@@ -1728,8 +1728,8 @@ jobs:
           vulkaninfo --summary
           GG_BUILD_VULKAN=1 bash ./ci/run.sh ~/results/llama.cpp ~/mnt/llama.cpp
 
-  ggml-ci-x64-linux-intel-vulkan:
-    runs-on: [self-hosted, Linux, X64, Intel]
+  ggml-ci-x64-windows-msys-vulkan:
+    runs-on: [self-hosted, Windows, X64, Intel]
 
     steps:
       - name: Clone
@@ -1738,6 +1738,7 @@ jobs:
 
       - name: Test
         id: ggml-ci
+        shell: msys2 {0}
         run: |
           vulkaninfo --summary
           GG_BUILD_VULKAN=1 bash ./ci/run.sh ~/results/llama.cpp ~/mnt/llama.cpp
