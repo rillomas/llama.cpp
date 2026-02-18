@@ -1796,6 +1796,9 @@ import sys
 from datetime import datetime
 from jinja2.sandbox import SandboxedEnvironment
 
+# Force LF print even on Windows so test results match expected
+sys.stdout.reconfigure(newline="\n")
+
 tmpl = json.loads(sys.argv[1])
 vars_json = json.loads(sys.argv[2])
 
