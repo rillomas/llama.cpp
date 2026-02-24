@@ -1742,6 +1742,11 @@ jobs:
           vulkaninfo --summary
           GG_BUILD_VULKAN=1 bash ./ci/run.sh ./results/llama.cpp ./mnt/llama.cpp
 
+      - name: Cleanup
+        run: |
+          WORKDIR="/opt/actions-runner/_work"
+          find "$WORKDIR" -mindepth 1 -maxdepth 1 -exec rm -rf {} \; || true
+
   ggml-ci-arm64-cpu-kleidiai:
      runs-on: ubuntu-22.04-arm
 
