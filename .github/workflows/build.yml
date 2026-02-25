@@ -1735,6 +1735,9 @@ jobs:
       - name: Clone
         id: checkout
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
 
       - name: Test
         id: ggml-ci
@@ -1743,14 +1746,13 @@ jobs:
           GG_BUILD_VULKAN=1 bash ./ci/run.sh ./results/llama.cpp ./mnt/llama.cpp
 
       - name: Cleanup
+        if: ${{ always() }}
         run: |
-          WORKDIR="/opt/actions-runner/_work"
-          # Delete everything EXCEPT the _actions and _temp folders to prevent
-          # checkout action from failing
-          find "$WORKDIR" -mindepth 1 -maxdepth 1 \
-            ! -name "_actions" \
-            ! -name "_temp" \
-            -exec rm -rf {} \; || true
+          # Wipe the contents of the repo checkout but keep the directory itself,
+          # so actions/checkout's post-run still has a valid CWD.
+          shopt -s dotglob nullglob
+          rm -rf "$GITHUB_WORKSPACE"/* || true
+          rm -rf "$GITHUB_WORKSPACE"/.[!.]* || true
 
   ggml-ci-arm64-cpu-kleidiai:
      runs-on: ubuntu-22.04-arm
