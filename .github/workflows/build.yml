@@ -1745,7 +1745,12 @@ jobs:
       - name: Cleanup
         run: |
           WORKDIR="/opt/actions-runner/_work"
-          find "$WORKDIR" -mindepth 1 -maxdepth 1 -exec rm -rf {} \; || true
+          # Delete everything EXCEPT the _actions and _temp folders to prevent
+          # checkout action from failing
+          find "$WORKDIR" -mindepth 1 -maxdepth 1 \
+            ! -name "_actions" \
+            ! -name "_temp" \
+            -exec rm -rf {} \; || true
 
   ggml-ci-arm64-cpu-kleidiai:
      runs-on: ubuntu-22.04-arm
