@@ -546,7 +546,7 @@ struct test_result {
         // Set test time
         time_t t = time(NULL);
         char   buf[32];
-        std::strftime(buf, sizeof(buf), "%FT%TZ", gmtime(&t));
+        std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", gmtime(&t));
         test_time = buf;
 
         // Set build info
@@ -574,7 +574,7 @@ struct test_result {
         // Set test time
         time_t t = time(NULL);
         char   buf[32];
-        std::strftime(buf, sizeof(buf), "%FT%TZ", gmtime(&t));
+        std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", gmtime(&t));
         test_time = buf;
 
         // Set build info
