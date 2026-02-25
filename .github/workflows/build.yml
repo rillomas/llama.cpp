@@ -1748,16 +1748,11 @@ jobs:
       - name: Cleanup
         if: ${{ always() }}
         run: |
-          echo "Cleaning $GITHUB_WORKSPACE"
           # Wipe the contents of the repo checkout but keep the directory itself,
           # so actions/checkout's post-run still has a valid CWD.
           shopt -s dotglob nullglob
           rm -rf "$GITHUB_WORKSPACE"/* || true
           rm -rf "$GITHUB_WORKSPACE"/.[!.]* || true
-          echo "Remaining after cleanup (should be empty list):"
-          shopt -u dotglob nullglob
-          # Check that the workspace is indeed empty
-          ls -la "$GITHUB_WORKSPACE"
 
 
   ggml-ci-arm64-cpu-kleidiai:
