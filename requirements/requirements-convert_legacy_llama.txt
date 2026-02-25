@@ -1,5 +1,6 @@
 numpy~=1.26.4
-sentencepiece>=0.1.98,<0.3.0
+# sentencepiece>=0.1.98,<0.3.0
+sentencepiece @ git+https://github.com/rillomas/sentencepiece.git@fix-compile-error-in-win-msys2-ucrt64#subdirectory=python
 
 transformers>=4.57.1,<5.0.0
 
