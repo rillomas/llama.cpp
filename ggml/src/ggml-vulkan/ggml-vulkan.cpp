@@ -12676,12 +12676,17 @@ static void ggml_backend_vk_set_tensor_async(ggml_backend_t backend, ggml_tensor
 
     vk_context transfer_ctx;
 
+    static size_t count = 0;
+    std::cout << "ggml_backend_vk_set_tensor_async: " << count;
+    count++;
     if (ctx->transfer_ctx.expired()) {
+        std::cout << " expired" << std::endl;
         // Initialize new transfer context
         transfer_ctx = ggml_vk_create_context(ctx, ctx->compute_cmd_pool);
         ctx->transfer_ctx = transfer_ctx;
         ggml_vk_ctx_begin(ctx->device, transfer_ctx);
     } else {
+        std::cout << " not expired" << std::endl;
         transfer_ctx = ctx->transfer_ctx.lock();
     }
 
