@@ -12676,23 +12676,26 @@ static void ggml_backend_vk_set_tensor_async(ggml_backend_t backend, ggml_tensor
 
     vk_context transfer_ctx;
 
-    static size_t count = 0;
-    std::cout << "ggml_backend_vk_set_tensor_async: " << count;
-    count++;
     if (ctx->transfer_ctx.expired()) {
-        std::cout << " expired" << std::endl;
-        {
-            std::lock_guard<std::mutex> guard(queue_mutex);
-            ctx->device->compute_queue.queue.waitIdle();
-        }
-        ggml_vk_command_pool_cleanup(ctx->device, ctx->compute_cmd_pool);
-
         // Initialize new transfer context
         transfer_ctx = ggml_vk_create_context(ctx, ctx->compute_cmd_pool);
         ctx->transfer_ctx = transfer_ctx;
-        ggml_vk_ctx_begin(ctx->device, transfer_ctx);
+        try {
+            ggml_vk_ctx_begin(ctx->device, transfer_ctx);
+        } catch (const vk::OutOfHostMemoryError& e) {
+            VK_LOG_DEBUG("ggml_backend_vk_set_tensor_async() -> Error: "
+                << e.what() << ". Cleaning pool and trying again");
+            // We may get an exception when we have allocated
+            // too many command buffers for transfer.
+            // In that case we clean the pool and try again
+            {
+                std::lock_guard<std::mutex> guard(queue_mutex);
+                ctx->device->compute_queue.queue.waitIdle();
+            }
+            ggml_vk_command_pool_cleanup(ctx->device, ctx->compute_cmd_pool);
+            ggml_vk_ctx_begin(ctx->device, transfer_ctx);
+        }
     } else {
-        std::cout << " not expired" << std::endl;
         transfer_ctx = ctx->transfer_ctx.lock();
     }
 
