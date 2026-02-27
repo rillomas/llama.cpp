@@ -12681,6 +12681,12 @@ static void ggml_backend_vk_set_tensor_async(ggml_backend_t backend, ggml_tensor
     count++;
     if (ctx->transfer_ctx.expired()) {
         std::cout << " expired" << std::endl;
+        {
+            std::lock_guard<std::mutex> guard(queue_mutex);
+            ctx->device->compute_queue.queue.waitIdle();
+        }
+        ggml_vk_command_pool_cleanup(ctx->device, ctx->compute_cmd_pool);
+
         // Initialize new transfer context
         transfer_ctx = ggml_vk_create_context(ctx, ctx->compute_cmd_pool);
         ctx->transfer_ctx = transfer_ctx;
