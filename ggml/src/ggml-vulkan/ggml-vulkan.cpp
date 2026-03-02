@@ -2218,6 +2218,7 @@ static void ggml_vk_submit(vk_context& ctx, vk::Fence fence) {
     }
 
     std::lock_guard<std::mutex> guard(queue_mutex);
+    std::cout << "Submitting ctx for " << ctx.get() << " cmd buffer: " << submit_infos[0].pCommandBuffers[0] << std::endl;
     ctx->p->q->queue.submit(submit_infos, fence);
 
     ctx->seqs.clear();
@@ -6132,6 +6133,7 @@ static bool ggml_vk_buffer_write_2d_async(vk_context subctx, vk_buffer& dst, siz
         }
 
         ggml_vk_sync_buffers(nullptr, subctx);
+        std::cout << "\n Copy buffer for context: " << subctx.get() << " cmd buffer: " << subctx->s->buffer << std::endl;
         subctx->s->buffer.copyBuffer(buf->buffer, dst->buffer, slices);
         return true;
     }
@@ -12680,21 +12682,21 @@ static void ggml_backend_vk_set_tensor_async(ggml_backend_t backend, ggml_tensor
         // Initialize new transfer context
         transfer_ctx = ggml_vk_create_context(ctx, ctx->compute_cmd_pool);
         ctx->transfer_ctx = transfer_ctx;
-        try {
+        //try {
             ggml_vk_ctx_begin(ctx->device, transfer_ctx);
-        } catch (const vk::OutOfHostMemoryError& e) {
-            VK_LOG_DEBUG("ggml_backend_vk_set_tensor_async() -> Error: "
-                << e.what() << ". Cleaning pool and trying again");
-            // We may get an exception when we have allocated
-            // too many command buffers for transfer.
-            // In that case we clean the pool and try again
-            {
-                std::lock_guard<std::mutex> guard(queue_mutex);
-                ctx->device->compute_queue.queue.waitIdle();
-            }
-            ggml_vk_command_pool_cleanup(ctx->device, ctx->compute_cmd_pool);
-            ggml_vk_ctx_begin(ctx->device, transfer_ctx);
-        }
+        //} catch (const vk::OutOfHostMemoryError& e) {
+        //    VK_LOG_DEBUG("ggml_backend_vk_set_tensor_async() -> Error: "
+        //        << e.what() << ". Cleaning pool and trying again");
+        //    // We may get an exception when we have allocated
+        //    // too many command buffers for transfer.
+        //    // In that case we clean the pool and try again
+        //    {
+        //        std::lock_guard<std::mutex> guard(queue_mutex);
+        //        ctx->device->compute_queue.queue.waitIdle();
+        //    }
+        //    ggml_vk_command_pool_cleanup(ctx->device, ctx->compute_cmd_pool);
+        //    ggml_vk_ctx_begin(ctx->device, transfer_ctx);
+        //}
     } else {
         transfer_ctx = ctx->transfer_ctx.lock();
     }

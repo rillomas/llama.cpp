@@ -6,6 +6,7 @@
 #include <cinttypes>
 #include <cstring>
 #include <future>
+#include <iostream>
 
 static const size_t kiB = 1024;
 static const size_t MiB = 1024*kiB;
@@ -1106,6 +1107,7 @@ bool llama_model_loader::load_all_data(
                         uintptr_t ptr_dest_aligned = (reinterpret_cast<uintptr_t>(host_ptrs[buffer_idx]) + alignment - 1) & ~(alignment - 1);
 
                         // Wait for previous upload to complete before reusing buffer
+                        std::cout << "\nSyncing event for index: " << buffer_idx << std::endl;
                         ggml_backend_event_synchronize(events[buffer_idx]);
 
                         // Read aligned chunk from file
