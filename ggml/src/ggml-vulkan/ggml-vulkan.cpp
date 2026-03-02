@@ -14533,6 +14533,8 @@ static void ggml_backend_vk_device_event_synchronize(ggml_backend_dev_t dev, ggm
     ggml_backend_vk_device_context * ctx = (ggml_backend_vk_device_context *)dev->context;
     auto device = ggml_vk_get_device(ctx->device);
     vk_event *vkev = (vk_event *)event->context;
+    auto res = device->device.getFenceStatus(vkev->fence);
+    std::cout << "Fence : " << &vkev->fence << " Status: " << res << std::endl;
 
     VK_CHECK(device->device.waitForFences({ vkev->fence }, true, UINT64_MAX), "event_synchronize");
 }
