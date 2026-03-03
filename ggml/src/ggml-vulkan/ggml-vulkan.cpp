@@ -190,7 +190,6 @@ struct vk_command_pool {
     uint32_t cmd_buffer_idx;
     std::vector<vk::CommandBuffer> cmd_buffers;
     std::deque<int64_t> reusable_cmd_buffer_index;
-    std::mutex reusable_cmd_buffer_index_mutex;
 
     vk_queue *q;
 };
@@ -2345,10 +2344,7 @@ static void ggml_vk_command_pool_cleanup(vk_device& device, vk_command_pool& p) 
     // Requires command buffers to be done
     device->device.resetCommandPool(p.pool);
     p.cmd_buffer_idx = 0;
-    {
-        std::lock_guard<std::mutex> guard(p.reusable_cmd_buffer_index_mutex);
-        p.reusable_cmd_buffer_index.clear();
-    }
+    p.reusable_cmd_buffer_index.clear();
 }
 
 static void ggml_vk_queue_command_pools_cleanup(vk_device& device) {
@@ -5990,13 +5986,10 @@ static void ggml_vk_push_reusable_cmd_buffer_index(vk_command_pool * pool, int64
         return;
     }
 
-    std::lock_guard<std::mutex> guard(pool->reusable_cmd_buffer_index_mutex);
     pool->reusable_cmd_buffer_index.push_back(idx);
 }
 
 static bool ggml_vk_try_pop_reusable_cmd_buffer_index(vk_command_pool & pool, int64_t & idx) {
-    std::lock_guard<std::mutex> guard(pool.reusable_cmd_buffer_index_mutex);
-
     if (pool.reusable_cmd_buffer_index.empty()) {
         return false;
     }
