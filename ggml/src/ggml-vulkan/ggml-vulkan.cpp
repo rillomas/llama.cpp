@@ -6870,7 +6870,7 @@ static void ggml_vk_buffer_copy(vk_buffer& dst, size_t dst_offset, vk_buffer& sr
         VK_LOG_DEBUG("ggml_vk_buffer_copy(SINGLE_DEVICE, " << size << ")");
         // Copy within the device
         vk_context subctx = ggml_vk_create_temporary_context(src->device->transfer_queue.cmd_pool);
-        vk::CommandBuffer buf = ggml_vk_create_cmd_buffer(dst->device, *subctx->p);
+        vk::CommandBuffer buf = ggml_vk_create_cmd_buffer(src->device, *subctx->p);
         ggml_vk_ctx_begin(subctx, buf);
         ggml_vk_buffer_copy_async(subctx, dst, dst_offset, src, src_offset, size);
         ggml_vk_ctx_end(subctx);
@@ -11871,7 +11871,7 @@ static void ggml_vk_test_matmul(ggml_backend_vk_context * ctx, size_t m, size_t 
     ggml_vk_buffer_write(d_Y, 0, y, sizeof(Y_TYPE) * k * n * batch);
 
     vk_context subctx = ggml_vk_create_context(ctx, ctx->compute_cmd_pool);
-    vk::CommandBuffer buf = ggml_vk_create_cmd_buffer(dst->device, *subctx->p);
+    vk::CommandBuffer buf = ggml_vk_create_cmd_buffer(ctx->device, *subctx->p);
     ggml_vk_ctx_begin(subctx, buf);
     for (size_t i = 0; i < num_it; i++) {
         ggml_vk_matmul(
