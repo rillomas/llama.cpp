@@ -6444,7 +6444,7 @@ static void ggml_vk_ctx_end(vk_context& ctx) {
 }
 
 static void ggml_vk_ctx_begin(vk_context& subctx, vk::CommandBuffer buffer) {
-    VK_LOG_DEBUG("ggml_vk_ctx_begin(" << &buffer << ")");
+    VK_LOG_DEBUG("ggml_vk_ctx_begin(" << buffer << ")");
     if (subctx->s != nullptr) {
         ggml_vk_ctx_end(subctx);
     }
