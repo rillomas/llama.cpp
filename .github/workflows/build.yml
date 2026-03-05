@@ -1731,6 +1731,11 @@ jobs:
   ggml-ci-x64-linux-intel-vulkan:
     runs-on: [self-hosted, Linux, X64, Intel]
 
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_UMASK: "002"
+      CCACHE_MAXSIZE: "5G"
+
     steps:
       - name: Clone
         id: checkout
@@ -1738,21 +1743,20 @@ jobs:
         with:
           persist-credentials: false
 
-
       - name: Test
         id: ggml-ci
         run: |
           vulkaninfo --summary
           GG_BUILD_VULKAN=1 bash ./ci/run.sh ./results/llama.cpp ./mnt/llama.cpp
 
-      - name: Cleanup
-        if: ${{ always() }}
-        run: |
-          # Wipe the contents of the repo checkout but keep the directory itself,
-          # so actions/checkout's post-run still has a valid CWD.
-          shopt -s dotglob nullglob
-          rm -rf "$GITHUB_WORKSPACE"/* || true
-          rm -rf "$GITHUB_WORKSPACE"/.[!.]* || true
+      # - name: Cleanup
+      #   if: ${{ always() }}
+      #   run: |
+      #     # Wipe the contents of the repo checkout but keep the directory itself,
+      #     # so actions/checkout's post-run still has a valid CWD.
+      #     shopt -s dotglob nullglob
+      #     rm -rf "$GITHUB_WORKSPACE"/* || true
+      #     rm -rf "$GITHUB_WORKSPACE"/.[!.]* || true
 
 
   ggml-ci-arm64-cpu-kleidiai:
