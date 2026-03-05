@@ -1731,11 +1731,6 @@ jobs:
   ggml-ci-x64-linux-intel-vulkan:
     runs-on: [self-hosted, Linux, X64, Intel]
 
-    env:
-      CCACHE_DIR: /var/cache/ccache/llama.cpp
-      CCACHE_UMASK: "002"
-      CCACHE_MAXSIZE: "5G"
-
     steps:
       - name: Clone
         id: checkout
@@ -1747,7 +1742,7 @@ jobs:
         id: ggml-ci
         run: |
           vulkaninfo --summary
-          GG_BUILD_VULKAN=1 bash ./ci/run.sh ./results/llama.cpp ./mnt/llama.cpp
+          GG_BUILD_VULKAN=1 bash ./ci/run.sh ~/results/llama.cpp ~/mnt/llama.cpp
 
   ggml-ci-arm64-cpu-kleidiai:
      runs-on: ubuntu-22.04-arm
