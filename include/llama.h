@@ -389,6 +389,7 @@ extern "C" {
         bool only_copy;                       // only copy tensors - ftype, allow_requantize and quantize_output_tensor are ignored
         bool pure;                            // quantize all tensors to the default type
         bool keep_split;                      // quantize to the same number of shards
+        bool dry_run;                         // calculate and show the final quantization size without performing quantization
         void * imatrix;                       // pointer to importance matrix data
         void * kv_overrides;                  // pointer to vector containing overrides
         void * tensor_types;                  // pointer to vector containing tensor types
@@ -656,21 +657,12 @@ extern "C" {
 
     // The following functions operate on a llama_context, hence the naming: llama_verb_...
 
-    // Add a loaded LoRA adapter to given context
-    // This will not modify model's weight
-    LLAMA_API int32_t llama_set_adapter_lora(
+    // Set LoRa adapters on the context. Will only modify if the adapters currently in context are different.
+    LLAMA_API int32_t llama_set_adapters_lora(
             struct llama_context * ctx,
-            struct llama_adapter_lora * adapter,
-            float scale);
-
-    // Remove a specific LoRA adapter from given context
-    // Return -1 if the adapter is not present in the context
-    LLAMA_API int32_t llama_rm_adapter_lora(
-            struct llama_context * ctx,
-            struct llama_adapter_lora * adapter);
-
-    // Remove all LoRA adapters from given context
-    LLAMA_API void llama_clear_adapter_lora(struct llama_context * ctx);
+            struct llama_adapter_lora ** adapters,
+            size_t n_adapters,
+            float * scales);
 
     // Apply a loaded control vector to a llama_context, or if data is NULL, clear
     // the currently loaded vector.
@@ -678,7 +670,7 @@ extern "C" {
     // to an n_embd x n_layers buffer starting from layer 1.
     // il_start and il_end are the layer range the vector should apply to (both inclusive)
     // See llama_control_vector_load in common to load a control vector.
-    LLAMA_API int32_t llama_apply_adapter_cvec(
+    LLAMA_API int32_t llama_set_adapter_cvec(
             struct llama_context * ctx,
                      const float * data,
                           size_t   len,
@@ -981,7 +973,7 @@ extern "C" {
 
     // Logits for the ith token. For positive indices, Equivalent to:
     // llama_get_logits(ctx) + ctx->output_ids[i]*n_vocab
-    // Negative indicies can be used to access logits in reverse order, -1 is the last logit.
+    // Negative indices can be used to access logits in reverse order, -1 is the last logit.
     // returns NULL for invalid ids.
     LLAMA_API float * llama_get_logits_ith(struct llama_context * ctx, int32_t i);
 
@@ -996,7 +988,7 @@ extern "C" {
 
     // Get the embeddings for the ith token. For positive indices, Equivalent to:
     // llama_get_embeddings(ctx) + ctx->output_ids[i]*n_embd
-    // Negative indicies can be used to access embeddings in reverse order, -1 is the last embedding.
+    // Negative indices can be used to access embeddings in reverse order, -1 is the last embedding.
     // shape: [n_embd] (1-dimensional)
     // returns NULL for invalid ids.
     LLAMA_API float * llama_get_embeddings_ith(struct llama_context * ctx, int32_t i);
@@ -1016,9 +1008,9 @@ extern "C" {
     // Returns LLAMA_TOKEN_NULL if no token was sampled.
     LLAMA_API llama_token llama_get_sampled_token_ith(struct llama_context * ctx, int32_t i);
 
-    // Get the backend sampled probabilites for the ith token
+    // Get the backend sampled probabilities for the ith token
     // The index matches llama_get_sampled_token_ith().
-    // Returns NULL if no probabilites were generated.
+    // Returns NULL if no probabilities were generated.
     LLAMA_API float *  llama_get_sampled_probs_ith      (struct llama_context * ctx, int32_t i);
     LLAMA_API uint32_t llama_get_sampled_probs_count_ith(struct llama_context * ctx, int32_t i);
 
@@ -1345,7 +1337,7 @@ extern "C" {
                                float   tau,
                                float   eta);
 
-    /// @details Intializes a GBNF grammar, see grammars/README.md for details.
+    /// @details Initializes a GBNF grammar, see grammars/README.md for details.
     /// @param vocab The vocabulary that this grammar will be used with.
     /// @param grammar_str The production rules for the grammar, encoded as a string. Returns an empty grammar if empty. Returns NULL if parsing of grammar_str fails.
     /// @param grammar_root The name of the start symbol for the grammar.

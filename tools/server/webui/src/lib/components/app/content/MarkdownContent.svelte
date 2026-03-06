@@ -15,14 +15,17 @@
 	import { rehypeRestoreTableHtml } from '$lib/markdown/table-html-restorer';
 	import { rehypeEnhanceLinks } from '$lib/markdown/enhance-links';
 	import { rehypeEnhanceCodeBlocks } from '$lib/markdown/enhance-code-blocks';
+	import { rehypeResolveAttachmentImages } from '$lib/markdown/resolve-attachment-images';
 	import { remarkLiteralHtml } from '$lib/markdown/literal-html';
 	import { copyCodeToClipboard, preprocessLaTeX, getImageErrorFallbackHtml } from '$lib/utils';
 	import {
 		IMAGE_NOT_ERROR_BOUND_SELECTOR,
 		DATA_ERROR_BOUND_ATTR,
 		DATA_ERROR_HANDLED_ATTR,
-		BOOL_TRUE_STRING
-	} from '$lib/constants/markdown';
+		BOOL_TRUE_STRING,
+		SETTINGS_KEYS
+	} from '$lib/constants';
+	import { UrlPrefix } from '$lib/enums';
 	import { FileTypeText } from '$lib/enums/files';
 	import {
 		highlightCode,
@@ -33,10 +36,10 @@
 	import githubDarkCss from 'highlight.js/styles/github-dark.css?inline';
 	import githubLightCss from 'highlight.js/styles/github.css?inline';
 	import { mode } from 'mode-watcher';
-	import ActionIconsCodeBlock from '$lib/components/app/actions/ActionIconsCodeBlock.svelte';
-	import DialogCodePreview from '$lib/components/app/misc/CodePreviewDialog.svelte';
+	import { ActionIconsCodeBlock, DialogCodePreview } from '$lib/components/app';
 	import { createAutoScrollController } from '$lib/hooks/use-auto-scroll.svelte';
 	import type { DatabaseMessageExtra } from '$lib/types/database';
+	import { config } from '$lib/stores/settings.svelte';
 
 	interface Props {
 		attachments?: DatabaseMessageExtra[];
@@ -100,6 +103,7 @@
 			.use(rehypeRestoreTableHtml) // Restore limited HTML (e.g., <br>, <ul>) inside Markdown tables
 			.use(rehypeEnhanceLinks) // Add target="_blank" to links
 			.use(rehypeEnhanceCodeBlocks) // Wrap code blocks with header and actions
+			.use(rehypeResolveAttachmentImages, { attachments })
 			.use(rehypeStringify, { allowDangerousHtml: true }); // Convert to HTML string
 	});
 
@@ -500,7 +504,10 @@
 		if (!img || !img.src) return;
 
 		// Don't handle data URLs or already-handled images
-		if (img.src.startsWith('data:') || img.dataset[DATA_ERROR_HANDLED_ATTR] === BOOL_TRUE_STRING)
+		if (
+			img.src.startsWith(UrlPrefix.DATA) ||
+			img.dataset[DATA_ERROR_HANDLED_ATTR] === BOOL_TRUE_STRING
+		)
 			return;
 		img.dataset[DATA_ERROR_HANDLED_ATTR] = BOOL_TRUE_STRING;
 
@@ -588,7 +595,12 @@
 	});
 </script>
 
-<div bind:this={containerRef} class={className}>
+<div
+	bind:this={containerRef}
+	class="{className}{config()[SETTINGS_KEYS.FULL_HEIGHT_CODE_BLOCKS]
+		? ' full-height-code-blocks'
+		: ''}"
+>
 	{#each renderedBlocks as block (block.id)}
 		<div class="markdown-block" data-block-id={block.id}>
 			<!-- eslint-disable-next-line no-at-html-tags -->
@@ -611,7 +623,7 @@
 					code={incompleteCodeBlock.code}
 					language={incompleteCodeBlock.language || 'text'}
 					disabled={true}
-					onPreview={(code: string, lang: string) => {
+					onPreview={(code, lang) => {
 						previewCode = code;
 						previewLanguage = lang;
 						previewDialogOpen = true;
@@ -907,6 +919,16 @@
 		overflow-x: auto;
 		padding: 3rem 1rem 1rem;
 		line-height: 1.3;
+	}
+
+	.full-height-code-blocks :global(.code-block-wrapper) {
+		max-height: none;
+	}
+
+	.full-height-code-blocks :global(.code-block-scroll-container),
+	.full-height-code-blocks .streaming-code-scroll-container {
+		max-height: none;
+		overflow-y: visible;
 	}
 
 	div :global(.code-block-header) {

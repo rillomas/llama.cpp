@@ -2,7 +2,7 @@
 	import { Square } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import {
-		ChatFormActionFileAttachments,
+		ChatFormActionAttachmentsDropdown,
 		ChatFormActionRecord,
 		ChatFormActionSubmit,
 		ModelsSelector
@@ -11,10 +11,9 @@
 	import { getFileTypeCategory } from '$lib/utils';
 	import { config } from '$lib/stores/settings.svelte';
 	import { modelsStore, modelOptions, selectedModelId } from '$lib/stores/models.svelte';
-	import { isRouterMode } from '$lib/stores/server.svelte';
+	import { isRouterMode, serverError } from '$lib/stores/server.svelte';
 	import { chatStore } from '$lib/stores/chat.svelte';
-	import { activeMessages, usedModalities } from '$lib/stores/conversations.svelte';
-	import { useModelChangeValidation } from '$lib/hooks/use-model-change-validation.svelte';
+	import { activeMessages } from '$lib/stores/conversations.svelte';
 
 	interface Props {
 		canSend?: boolean;
@@ -46,6 +45,7 @@
 
 	let currentConfig = $derived(config());
 	let isRouter = $derived(isRouterMode());
+	let isOffline = $derived(!!serverError());
 
 	let conversationModel = $derived(
 		chatStore.getConversationModel(activeMessages() as DatabaseMessage[])
@@ -56,7 +56,10 @@
 	$effect(() => {
 		if (conversationModel && conversationModel !== previousConversationModel) {
 			previousConversationModel = conversationModel;
-			modelsStore.selectModelByName(conversationModel);
+
+			if (!isRouter || modelsStore.isModelLoaded(conversationModel)) {
+				modelsStore.selectModelByName(conversationModel);
+			}
 		}
 	});
 
@@ -154,44 +157,41 @@
 	export function openModelSelector() {
 		selectorModelRef?.open();
 	}
-
-	const { handleModelChange } = useModelChangeValidation({
-		getRequiredModalities: () => usedModalities(),
-		onValidationFailure: async (previousModelId) => {
-			if (previousModelId) {
-				await modelsStore.selectModelById(previousModelId);
-			}
-		}
-	});
 </script>
 
 <div class="flex w-full items-center gap-3 {className}" style="container-type: inline-size">
-	<ChatFormActionFileAttachments
-		class="mr-auto"
-		{disabled}
-		{hasAudioModality}
-		{hasVisionModality}
-		{onFileUpload}
-		{onSystemPromptClick}
-	/>
+	<div class="mr-auto flex items-center gap-2">
+		<ChatFormActionAttachmentsDropdown
+			{disabled}
+			{hasAudioModality}
+			{hasVisionModality}
+			{onFileUpload}
+			{onSystemPromptClick}
+		/>
+	</div>
 
-	<ModelsSelector
-		{disabled}
-		bind:this={selectorModelRef}
-		currentModel={conversationModel}
-		forceForegroundText={true}
-		useGlobalSelection={true}
-		onModelChange={handleModelChange}
-	/>
+	<div class="ml-auto flex items-center gap-1.5">
+		<ModelsSelector
+			bind:this={selectorModelRef}
+			currentModel={conversationModel}
+			disabled={disabled || isOffline}
+			forceForegroundText={true}
+			useGlobalSelection={true}
+		/>
+	</div>
 
 	{#if isLoading}
 		<Button
 			type="button"
+			variant="secondary"
 			onclick={onStop}
-			class="h-8 w-8 bg-transparent p-0 hover:bg-destructive/20"
+			class="group h-8 w-8 rounded-full p-0 hover:bg-destructive/10!"
 		>
 			<span class="sr-only">Stop</span>
-			<Square class="h-8 w-8 fill-destructive stroke-destructive" />
+
+			<Square
+				class="h-8 w-8 fill-muted-foreground stroke-muted-foreground group-hover:fill-destructive group-hover:stroke-destructive hover:fill-destructive hover:stroke-destructive"
+			/>
 		</Button>
 	{:else if shouldShowRecordButton}
 		<ChatFormActionRecord {disabled} {hasAudioModality} {isLoading} {isRecording} {onMicClick} />

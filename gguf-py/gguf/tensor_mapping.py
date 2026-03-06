@@ -567,6 +567,10 @@ class TensorNameMap:
             "model.layers.{bid}.mlp.chunk_experts.gate_proj",           # grovemoe
         ),
 
+        MODEL_TENSOR.FFN_GATE_UP_EXP: (
+            "model.layers.{bid}.mlp.experts.gate_up_proj",
+        ),
+
         # Feed-forward down
         MODEL_TENSOR.FFN_DOWN: (
             "gpt_neox.layers.{bid}.mlp.dense_4h_to_h",                # gptneox
@@ -1206,6 +1210,22 @@ class TensorNameMap:
             "model.layers.{bid}.self_attn.vision_expert_query_key_value",  # cogvlm
         ),
 
+        MODEL_TENSOR.INDEXER_K_NORM: (
+            "model.layers.{bid}.self_attn.indexer.k_norm", # DSA
+        ),
+
+        MODEL_TENSOR.INDEXER_PROJ: (
+            "model.layers.{bid}.self_attn.indexer.weights_proj", # DSA
+        ),
+
+        MODEL_TENSOR.INDEXER_ATTN_K: (
+            "model.layers.{bid}.self_attn.indexer.wk", # DSA
+        ),
+
+        MODEL_TENSOR.INDEXER_ATTN_Q_B: (
+            "model.layers.{bid}.self_attn.indexer.wq_b", # DSA
+        ),
+
         ############################################################################
         # TODO: these do not belong to block_mappings_cfg - move them to mappings_cfg
         MODEL_TENSOR.ENC_OUTPUT_NORM: (
@@ -1223,6 +1243,10 @@ class TensorNameMap:
 
         MODEL_TENSOR.CLS_OUT: (
             "classifier.out_proj", # roberta
+        ),
+
+        MODEL_TENSOR.CLS_NORM: (
+            "head.norm", # modern-bert
         ),
         #############################################################################
 
@@ -1305,6 +1329,7 @@ class TensorNameMap:
             "multi_modal_projector.linear_{bid}",
             "mm_projector.proj.linear_{bid}", # Kimi-K2.5
             "visual.merger.mlp.{bid}", # qwen2vl
+            "mlp_AR.linear_{bid}", # PaddleOCR-VL
             "merger.mlp.{bid}",
         ),
 
@@ -1330,6 +1355,7 @@ class TensorNameMap:
             "model.vision_tower.embeddings.cls_token", # Intern-S1
             "vision_model.class_embedding", # llama 4
             "model.vision.patch_embedding.cls_embedding", # cogvlm
+            "vision_model.radio_model.model.patch_generator.cls_token.token", # Nemotron Nano v2 VL
         ),
 
         MODEL_TENSOR.V_ENC_EMBD_PATCH: (
@@ -1344,6 +1370,7 @@ class TensorNameMap:
             "vision_tower.patch_embed.proj", # kimi-vl
             "model.vision.patch_embedding.proj", # cogvlm
             "siglip2.vision_model.embeddings.patch_embedding",
+            "vision_model.radio_model.model.patch_generator.embedder", # Nemotron Nano v2 VL
         ),
 
         MODEL_TENSOR.V_ENC_EMBD_NORM: (
@@ -1360,12 +1387,14 @@ class TensorNameMap:
             "visual.pos_embed", # qwen3vl
             "model.vision.patch_embedding.position_embedding", # cogvlm
             "visual.embeddings.position_embedding", # glm4v
+            "vision_model.radio_model.model.patch_generator.pos_embed", # Nemotron Nano v2 VL
         ),
 
         MODEL_TENSOR.V_ENC_ATTN_QKV: (
             "visual.blocks.{bid}.attn.qkv", # qwen3vl
             "model.vision.transformer.layers.{bid}.attention.query_key_value", # cogvlm
-            "vision_tower.encoder.blocks.{bid}.wqkv" # Kimi-K2.5
+            "vision_tower.encoder.blocks.{bid}.wqkv", # Kimi-K2.5
+            "vision_model.radio_model.model.blocks.{bid}.attn.qkv", # Nemotron Nano v2 VL
         ),
 
         MODEL_TENSOR.V_ENC_ATTN_Q: (
@@ -1384,6 +1413,7 @@ class TensorNameMap:
         MODEL_TENSOR.V_ENC_ATTN_Q_NORM: (
             "vision_tower.vision_model.encoder.layers.{bid}.attn.q_norm", # InternVL
             "model.vision_tower.encoder.layer.{bid}.attention.q_norm", # Intern-S1
+            "visual.blocks.{bid}.attn.q_norm", # GLM-OCR
         ),
 
         MODEL_TENSOR.V_ENC_ATTN_K: (
@@ -1402,6 +1432,7 @@ class TensorNameMap:
         MODEL_TENSOR.V_ENC_ATTN_K_NORM: (
             "vision_tower.vision_model.encoder.layers.{bid}.attn.k_norm", # InternVL
             "model.vision_tower.encoder.layer.{bid}.attention.k_norm", # Intern-S1
+            "visual.blocks.{bid}.attn.k_norm", # GLM-OCR
         ),
 
         MODEL_TENSOR.V_ENC_ATTN_V: (
@@ -1430,6 +1461,7 @@ class TensorNameMap:
             "vision_tower.encoder.blocks.{bid}.norm0", # kimi-vl (norm0/norm1)
             "model.vision.transformer.layers.{bid}.input_layernorm", # cogvlm
             "siglip2.vision_model.encoder.layers.{bid}.layer_norm1",
+            "vision_model.radio_model.model.blocks.{bid}.norm1", # Nemotron Nano v2 VL
         ),
 
         MODEL_TENSOR.V_ENC_ATTN_O: (
@@ -1446,6 +1478,7 @@ class TensorNameMap:
             "vision_tower.encoder.blocks.{bid}.wo", # kimi-vl
             "model.vision.transformer.layers.{bid}.attention.dense", # cogvlm
             "siglip2.vision_model.encoder.layers.{bid}.self_attn.out_proj", # youtuvl
+            "vision_model.radio_model.model.blocks.{bid}.attn.proj", # Nemotron Nano v2 VL
         ),
 
         MODEL_TENSOR.V_ENC_POST_ATTN_NORM: (
@@ -1461,6 +1494,7 @@ class TensorNameMap:
             "vision_tower.encoder.blocks.{bid}.norm1", # kimi-vl (norm0/norm1)
             "model.vision.transformer.layers.{bid}.post_attention_layernorm", # cogvlm
             "siglip2.vision_model.encoder.layers.{bid}.layer_norm2",
+            "vision_model.radio_model.model.blocks.{bid}.norm2", # Nemotron Nano v2 VL
         ),
 
         MODEL_TENSOR.V_ENC_FFN_UP: (
@@ -1477,6 +1511,7 @@ class TensorNameMap:
             "vision_tower.encoder.blocks.{bid}.mlp.fc0", # kimi-vl (fc0/fc1)
             "model.vision.transformer.layers.{bid}.mlp.fc1", # cogvlm
             "siglip2.vision_model.encoder.layers.{bid}.mlp.fc1",
+            "vision_model.radio_model.model.blocks.{bid}.mlp.fc1", # Nemotron Nano v2 VL
         ),
 
         MODEL_TENSOR.V_ENC_FFN_GATE: (
@@ -1499,6 +1534,7 @@ class TensorNameMap:
             "vision_tower.encoder.blocks.{bid}.mlp.fc1", # kimi-vl (fc0/fc1)
             "model.vision.transformer.layers.{bid}.mlp.fc2", # cogvlm
             "siglip2.vision_model.encoder.layers.{bid}.mlp.fc2",
+            "vision_model.radio_model.model.blocks.{bid}.mlp.fc2", # Nemotron Nano v2 VL
         ),
 
         MODEL_TENSOR.V_LAYER_SCALE_1: (
@@ -1543,6 +1579,7 @@ class TensorNameMap:
             "mm_projector.pre_norm", # Kimi-K2.5
             "pre_mm_projector_norm",
             "model.vision.linear_proj.norm1", # cogvlm
+            "mlp_AR.pre_norm", # PaddleOCR-VL
             "merger.ln_q",
         ),
 
@@ -1568,6 +1605,7 @@ class TensorNameMap:
 
         MODEL_TENSOR.V_RESMPL_ATTN_OUT: (
             "resampler.attn.out_proj",
+            "model.vision_model.head.attention.out_proj",
         ),
 
         MODEL_TENSOR.V_RESMPL_KV: (
