@@ -2498,6 +2498,9 @@ static void ggml_vk_command_pool_cleanup(vk_device& device, vk_command_pool& p) 
     // Requires command buffers to be done
     device->device.resetCommandPool(p.pool);
     p.cmd_buffer_idx = 0;
+    for (auto& cmd_buffer : p.cmd_buffers) {
+        cmd_buffer.in_use = false;
+    }
 }
 
 static void ggml_vk_queue_command_pools_cleanup(vk_device& device) {
