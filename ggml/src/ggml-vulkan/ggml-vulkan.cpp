@@ -6358,7 +6358,7 @@ static vk_subbuffer ggml_vk_tensor_subbuffer(
 }
 
 // Get a command buffer from pool. Create a new one if no reusable buffer is available
-static vk_command_buffer* ggml_vk_get_or_create_cmd_buffer(vk_device & device, vk_command_pool & pool) {
+static vk_command_buffer* ggml_vk_get_or_create_cmd_buffer(vk_device& device, vk_command_pool& pool) {
     for (auto& cmd_buffer : pool.cmd_buffers) {
         if (!cmd_buffer.in_use) {
             cmd_buffer.in_use = true;
