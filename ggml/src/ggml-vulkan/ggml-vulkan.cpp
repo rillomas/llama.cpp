@@ -201,12 +201,16 @@ struct vk_command_pool {
     void destroy(vk::Device& device);
 
     vk::CommandPool pool;
-    uint32_t cmd_buffer_idx;
     // Using deque so the pointers to command buffers
     // remain valid even if we add more
     std::deque<vk_command_buffer> cmd_buffers;
 
     vk_queue *q;
+
+    size_t buffers_in_use() const {
+        return std::count_if(cmd_buffers.begin(), cmd_buffers.end(),
+            [](const auto& cb) { return cb.in_use; });
+    }
 };
 
 // Prevent simultaneous submissions to the same queue.
@@ -884,7 +888,7 @@ struct vk_device_struct {
 };
 
 void vk_command_pool::init(vk_device& device, vk_queue *q_) {
-    cmd_buffer_idx = 0;
+    cmd_buffers.clear();
     q = q_;
 
     vk::CommandPoolCreateInfo command_pool_create_info(
@@ -2294,19 +2298,13 @@ static void ggml_pipeline_allocate_descriptor_sets(ggml_backend_vk_context * ctx
 
 static vk_command_buffer* ggml_vk_create_cmd_buffer(vk_device& device, vk_command_pool& p) {
     VK_LOG_DEBUG("ggml_vk_create_cmd_buffer()");
-
-    if (p.cmd_buffers.size() > p.cmd_buffer_idx) {
-        // Reuse command buffer
-        return &p.cmd_buffers[p.cmd_buffer_idx++];
-    }
-
     vk::CommandBufferAllocateInfo command_buffer_alloc_info(
         p.pool,
         vk::CommandBufferLevel::ePrimary,
         1);
     const std::vector<vk::CommandBuffer> cmd_buffers = device->device.allocateCommandBuffers(command_buffer_alloc_info);
     p.cmd_buffers.push_back({ cmd_buffers.front(), true });
-    return &p.cmd_buffers[p.cmd_buffer_idx++];
+    return &p.cmd_buffers[p.cmd_buffers.size()-1];
 }
 
 static void ggml_vk_submit(vk_context& ctx, vk::Fence fence) {
@@ -2497,7 +2495,8 @@ static void ggml_vk_command_pool_cleanup(vk_device& device, vk_command_pool& p) 
 
     // Requires command buffers to be done
     device->device.resetCommandPool(p.pool);
-    p.cmd_buffer_idx = 0;
+    // Don't clear the command buffers and mark them as not in use.
+    // This allows us to reuse them
     for (auto& cmd_buffer : p.cmd_buffers) {
         cmd_buffer.in_use = false;
     }
@@ -2509,10 +2508,10 @@ static void ggml_vk_queue_command_pools_cleanup(vk_device& device) {
     // Arbitrary frequency to cleanup/reuse command buffers
     static constexpr uint32_t cleanup_frequency = 10;
 
-    if (device->compute_queue.cmd_pool.cmd_buffer_idx >= cleanup_frequency) {
+    if (device->compute_queue.cmd_pool.buffers_in_use() >= cleanup_frequency) {
         ggml_vk_command_pool_cleanup(device, device->compute_queue.cmd_pool);
     }
-    if (device->transfer_queue.cmd_pool.cmd_buffer_idx >= cleanup_frequency) {
+    if (device->transfer_queue.cmd_pool.buffers_in_use() >= cleanup_frequency) {
         ggml_vk_command_pool_cleanup(device, device->transfer_queue.cmd_pool);
     }
 }
