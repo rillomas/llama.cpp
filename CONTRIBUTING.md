@@ -20,7 +20,7 @@ If AI is used to generate any portion of the code, contributors must adhere to t
 1. Explicitly disclose the manner in which AI was employed.
 2. Perform a comprehensive manual review prior to submitting the pull request.
 3. Be prepared to explain every line of code they submitted when asked about it by a maintainer.
-4. Using AI to write pull request descriptions or to respond to human reviewers is strictly prohibited.
+4. It is strictly prohibited to use AI to write your posts for you (bug reports, feature requests, pull request descriptions, Github discussions, responding to humans, ...).
 
 For more info, please refer to the [AGENTS.md](AGENTS.md) file.
 
@@ -39,6 +39,7 @@ Before submitting your PR:
     - For intricate features, consider opening a feature request first to discuss and align expectations
     - When adding support for a new model or feature, focus on **CPU support only** in the initial PR unless you have a good reason not to. Add support for other backends like CUDA in follow-up PRs
 - Consider allowing write access to your branch for faster reviews, as reviewers can push commits directly
+- If you are a new contributor, limit your open PRs to 1.
 
 After submitting your PR:
 - Expect requests for modifications to ensure the code meets llama.cpp's standards for quality and long-term maintainability
@@ -159,7 +160,7 @@ Maintainers reserve the right to decline review or close pull requests for any r
 
 # Code maintenance
 
-- Existing code should have designated collaborators and/or maintainers specified in the [CODEOWNERS](CODEOWNERS) file reponsible for:
+- Existing code should have designated collaborators and/or maintainers specified in the [CODEOWNERS](CODEOWNERS) file responsible for:
   - Reviewing and merging related PRs
   - Fixing related bugs
   - Providing developer guidance/support
