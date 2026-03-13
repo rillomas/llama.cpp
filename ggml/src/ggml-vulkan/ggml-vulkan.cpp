@@ -39,6 +39,7 @@ DispatchLoaderDynamic & ggml_vk_default_dispatcher();
 #include <mutex>
 #include <future>
 #include <thread>
+#include <chrono>
 
 #if defined(_MSC_VER)
 # define NOMINMAX 1
@@ -6441,6 +6442,7 @@ static void ggml_vk_dispatch_pipeline(ggml_backend_vk_context* ctx, vk_context& 
     const uint32_t wg0 = CEIL_DIV(elements[0], pipeline->wg_denoms[0]);
     const uint32_t wg1 = CEIL_DIV(elements[1], pipeline->wg_denoms[1]);
     const uint32_t wg2 = CEIL_DIV(elements[2], pipeline->wg_denoms[2]);
+    //GGML_LOG_INFO("ggml_vk_dispatch_pipeline(%s)\n", pipeline->name.c_str());
     VK_LOG_DEBUG("ggml_vk_dispatch_pipeline(" << pipeline->name << ", {";
     for (auto& buffer : descriptor_buffer_infos) {
         std::cerr << "(" << buffer.buffer << ", " << buffer.offset << ", " << buffer.range << "), ";
@@ -13218,7 +13220,8 @@ static void ggml_vk_compute_forward(ggml_backend_vk_context * ctx, ggml_cgraph *
         for (auto& mset : subctx->memsets) {
             memset(mset.dst, mset.val, mset.n);
         }
-
+        
+        //auto start = std::chrono::high_resolution_clock::now();
         if (almost_ready && !ctx->almost_ready_fence_pending) {
             ggml_vk_submit(subctx, ctx->almost_ready_fence);
             ctx->almost_ready_fence_pending = true;
@@ -13226,11 +13229,15 @@ static void ggml_vk_compute_forward(ggml_backend_vk_context * ctx, ggml_cgraph *
             ggml_vk_submit(subctx, {});
         }
         ctx->submit_pending = true;
+        //ggml_vk_synchronize(ctx);
+        //auto end = std::chrono::high_resolution_clock::now();
 
 #ifdef GGML_VULKAN_CHECK_RESULTS
         ggml_vk_synchronize(ctx);
         ggml_vk_check_results_1(ctx, cgraph, tensor_idx);
 #endif
+        //auto usec = std::chrono::duration_cast<std::chrono::microseconds>(end-start).count();
+        //GGML_LOG_INFO("ggml_vk_compute_forward: %s %zu us\n", ggml_op_name(tensor->op), usec);
     }
 
     if (tensor_idx == subctx->exit_tensor_idx) {
