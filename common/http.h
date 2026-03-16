@@ -2,8 +2,6 @@
 
 #include <cpp-httplib/httplib.h>
 
-#include <cstdlib>
-
 struct common_http_url {
     std::string scheme;
     std::string user;
@@ -13,15 +11,13 @@ struct common_http_url {
     std::string path;
 };
 
-static common_http_url common_http_parse_url(const std::string & url);
-
-static std::string common_http_get_env(const char * key_upper, const char * key_lower) {
-    const char * val = std::getenv(key_upper);
+static std::string common_http_get_env(const std::string & key_upper, const std::string & key_lower) {
+    const char * val = std::getenv(key_upper.c_str());
     if (val && val[0] != '\0') {
         return val;
     }
 
-    val = std::getenv(key_lower);
+    val = std::getenv(key_lower.c_str());
     if (val && val[0] != '\0') {
         return val;
     }
@@ -29,7 +25,7 @@ static std::string common_http_get_env(const char * key_upper, const char * key_
     return {};
 }
 
-static std::string common_http_parse_scheme(const std::string& url, size_t & scheme_end) {
+static std::string common_http_parse_scheme(const std::string & url, size_t & scheme_end) {
     scheme_end = url.find("://");
 
     if (scheme_end == std::string::npos) {
