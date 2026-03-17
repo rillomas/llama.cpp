@@ -105,14 +105,6 @@ if [ ! -z ${GG_BUILD_VULKAN} ]; then
     if [[ "$OSTYPE" == "darwin"* ]]; then
         CMAKE_EXTRA="${CMAKE_EXTRA} -DGGML_METAL=OFF -DGGML_BLAS=OFF"
     fi
-
-    # If on Windows use MinGW (assuming Visual Studio is not installed).
-    # Also disable a specific warning related to SUBPROCESS_NULL
-    # if [[ "$OSTYPE" == "msys"* ]]; then
-    #     CMAKE_EXTRA="${CMAKE_EXTRA} -DBUILD_SHARED_LIBS=ON -Wno-error=conversion-null"
-    #     GENERATOR=(-G "MinGW Makefiles")
-    # fi
-
 fi
 
 if [ ! -z ${GG_BUILD_WEBGPU} ]; then
@@ -245,7 +237,7 @@ function gg_run_ctest_debug {
     (time cmake -DCMAKE_BUILD_TYPE=Debug ${CMAKE_EXTRA} .. ) 2>&1 | tee -a $OUT/${ci}-cmake.log
     (time cmake --build . --config Debug -j$(nproc)        ) 2>&1 | tee -a $OUT/${ci}-make.log
 
-    (time ctest --output-on-failure -L main -E "test-opt|test-backend-ops" ${CTEST_EXTRA)} 2>&1 | tee -a $OUT/${ci}-ctest.log
+    (time ctest --output-on-failure -L main -E "test-opt|test-backend-ops" ${CTEST_EXTRA}) 2>&1 | tee -a $OUT/${ci}-ctest.log
 
     set +e
 }
@@ -337,7 +329,7 @@ function gg_run_ctest_with_model_debug {
     cd build-ci-debug
     set -e
 
-    (LLAMACPP_TEST_MODELFILE="$model" time ctest -C Debug --output-on-failure -L model) 2>&1 | tee -a $OUT/${ci}-ctest.log
+    (LLAMACPP_TEST_MODELFILE="$model" time ctest --output-on-failure -L model) 2>&1 | tee -a $OUT/${ci}-ctest.log
 
     set +e
     cd ..
@@ -350,7 +342,7 @@ function gg_run_ctest_with_model_release {
     cd build-ci-release
     set -e
 
-    (LLAMACPP_TEST_MODELFILE="$model" time ctest -C Release --output-on-failure -L model) 2>&1 | tee -a $OUT/${ci}-ctest.log
+    (LLAMACPP_TEST_MODELFILE="$model" time ctest --output-on-failure -L model) 2>&1 | tee -a $OUT/${ci}-ctest.log
 
     # test memory leaks
     #if [[ ! -z ${GG_BUILD_METAL} ]]; then
