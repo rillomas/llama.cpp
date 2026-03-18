@@ -214,6 +214,8 @@ jobs:
 
   ggml-ci-x64-win-intel-vulkan:
     runs-on: [self-hosted, Windows, X64, Intel]
+    env:
+      MSYSTEM: UCRT64
 
     steps:
       - name: Clone
@@ -222,8 +224,9 @@ jobs:
 
       - name: Test
         id: ggml-ci
-        shell: ucrt64
+        shell: msys2 {0}
         run: |
+          echo "MSYSTEM=$MSYSTEM"
           vulkaninfo --summary
           GG_BUILD_VULKAN=1 ./ci/run.sh ./results/llama.cpp ./mnt/llama.cpp
 
