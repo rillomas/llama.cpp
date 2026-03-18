@@ -214,8 +214,6 @@ jobs:
 
   ggml-ci-x64-win-intel-vulkan:
     runs-on: [self-hosted, Windows, X64, Intel]
-    env:
-      MSYSTEM: UCRT64
 
     steps:
       - name: Clone
@@ -224,11 +222,14 @@ jobs:
 
       - name: Test
         id: ggml-ci
-        shell: msys2 {0}
+        shell: C:\msys64\msys2.cmd -defterm -no-start -here -c "{0}"
+        env:
+          MSYSTEM: UCRT64
+          CHERE_INVOKING: 1
         run: |
           echo "MSYSTEM=$MSYSTEM"
           vulkaninfo --summary
-          GG_BUILD_VULKAN=1 ./ci/run.sh ./results/llama.cpp ./mnt/llama.cpp
+          GG_BUILD_VULKAN=1 ./ci/run.sh ~/results/llama.cpp ~/mnt/llama.cpp
 
   ggml-ci-intel-openvino-gpu-low-perf:
     runs-on: [self-hosted, Linux, Intel, OpenVINO]
