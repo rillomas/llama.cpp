@@ -114,7 +114,7 @@ if [ ! -z ${GG_BUILD_VULKAN} ]; then
 
     # Build shared libs on Windows
     # to reduce binary size and avoid errors in library loading unit tests
-    if $is_windows; then
+    if uname -s | grep -qi nt; then
         CMAKE_EXTRA="${CMAKE_EXTRA} -DBUILD_SHARED_LIBS=ON"
     fi
 fi
@@ -689,7 +689,6 @@ function gg_sum_test_backend_ops_cpu {
 
 export LLAMA_LOG_PREFIX=1
 export LLAMA_LOG_TIMESTAMPS=1
-
 
 if [ -z ${GG_BUILD_LOW_PERF} ]; then
     # Create symlink: ./llama.cpp/models-mnt -> $MNT/models
