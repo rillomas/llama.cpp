@@ -231,7 +231,7 @@ jobs:
           echo "MSYSTEM=$MSYSTEM"
           echo "PWD=$PWD"
           vulkaninfo --summary
-          GG_BUILD_VULKAN=1 ./ci/run.sh "$HOME/results/llama.cpp" "$HOME/mnt/llama.cpp"
+          GG_BUILD_VULKAN=1 ./ci/run.sh ./results/llama.cpp ./mnt/llama.cpp
 
   ggml-ci-intel-openvino-gpu-low-perf:
     runs-on: [self-hosted, Linux, Intel, OpenVINO]
