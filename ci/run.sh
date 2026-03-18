@@ -54,14 +54,6 @@ sd=`dirname $0`
 cd $sd/../
 SRC=`pwd`
 
-# Run a subset of the tests on Windows
-# due to python package issues
-if uname -s | grep -qi nt; then
-  is_windows=true
-else
-  is_windows=false
-fi
-
 CMAKE_EXTRA="-DLLAMA_FATAL_WARNINGS=${LLAMA_FATAL_WARNINGS:-ON} -DLLAMA_OPENSSL=OFF -DGGML_SCHED_NO_REALLOC=ON"
 CTEST_EXTRA=""
 
@@ -292,8 +284,7 @@ function gg_run_ctest_release {
     (time cmake -DCMAKE_BUILD_TYPE=Release ${CMAKE_EXTRA} .. ) 2>&1 | tee -a $OUT/${ci}-cmake.log
     (time cmake --build . --config Release -j$(nproc)        ) 2>&1 | tee -a $OUT/${ci}-make.log
 
-    # Skip python related test on Windows due to MSYS2 python package issues
-    if ! $is_windows && [ -z ${GG_BUILD_LOW_PERF} ]; then
+    if [ -z ${GG_BUILD_LOW_PERF} ]; then
         (time ctest -C Release --output-on-failure -L 'main|python' ${CTEST_EXTRA}) 2>&1 | tee -a $OUT/${ci}-ctest.log
     else
         (time ctest -C Release --output-on-failure -L main -E test-opt ${CTEST_EXTRA}) 2>&1 | tee -a $OUT/${ci}-ctest.log
@@ -707,18 +698,15 @@ if [ -z ${GG_BUILD_LOW_PERF} ]; then
     mkdir -p ${mnt_models}
     ln -sfn ${mnt_models} ${SRC}/models-mnt
 
-    # Skip python setup on Windows to avoid python environement issues
-    if ! $is_windows; then
-        # Create a fresh python3 venv and enter it
-        if ! python3 -m venv "$MNT/venv"; then
-            echo "Error: Failed to create Python virtual environment at $MNT/venv."
-            exit 1
-        fi
-        source "$MNT/venv/bin/activate"
-
-        pip install -r ${SRC}/requirements.txt --disable-pip-version-check
-        pip install --editable gguf-py --disable-pip-version-check
+    # Create a fresh python3 venv and enter it
+    if ! python3 -m venv "$MNT/venv"; then
+        echo "Error: Failed to create Python virtual environment at $MNT/venv."
+        exit 1
     fi
+    source "$MNT/venv/bin/activate"
+
+    pip install -r ${SRC}/requirements.txt --disable-pip-version-check
+    pip install --editable gguf-py --disable-pip-version-check
 fi
 
 ret=0
