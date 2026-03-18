@@ -226,7 +226,7 @@ jobs:
         env:
           MSYSTEM: UCRT64
           CHERE_INVOKING: 1
-          PATH: C:\msys64\ucrt64\bin;C:\msys64\usr\bin;${{ env.PATH }}
+          PATH: C:\msys64\ucrt64\bin;C:\msys64\usr\bin;C:\Windows\System32;${{ env.PATH }}
         run: |
           echo "MSYSTEM=$MSYSTEM"
           echo "PWD=$PWD"
