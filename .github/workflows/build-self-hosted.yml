@@ -222,11 +222,10 @@ jobs:
 
       - name: Test
         id: ggml-ci
-        env:
-          GG_BUILD_VULKAN: 1
+        shell: msys2 UCRT64
         run: |
           vulkaninfo --summary
-          python ./ci/run.py ./results/llama.cpp ./mnt/llama.cpp
+          GG_BUILD_VULKAN=1 ./ci/run.sh ./results/llama.cpp ./mnt/llama.cpp
 
   ggml-ci-intel-openvino-gpu-low-perf:
     runs-on: [self-hosted, Linux, Intel, OpenVINO]
