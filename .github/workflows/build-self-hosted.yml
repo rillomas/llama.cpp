@@ -222,14 +222,14 @@ jobs:
 
       - name: Test
         id: ggml-ci
-        shell: C:\msys64\msys2.cmd -defterm -no-start -here -c "{0}"
+        shell: C:\msys64\msys2_shell.cmd -defterm -no-start -ucrt64 -here -c "{0}"
         env:
-          MSYSTEM: UCRT64
           CHERE_INVOKING: 1
         run: |
-          set -e
+          set -euo pipefail
           echo "MSYSTEM=$MSYSTEM"
           echo "PWD=$PWD"
+          echo "PATH=$PATH"
           vulkaninfo --summary
           GG_BUILD_VULKAN=1 ./ci/run.sh ./results/llama.cpp ./mnt/llama.cpp
 
