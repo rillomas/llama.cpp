@@ -212,7 +212,7 @@ jobs:
           vulkaninfo --summary
           GG_BUILD_VULKAN=1 bash ./ci/run.sh ~/results/llama.cpp ~/mnt/llama.cpp
 
-  ggml-ci-x64-win-intel-vulkan:
+  ggml-ci-win-intel-vulkan:
     runs-on: [self-hosted, Windows, X64, Intel]
 
     steps:
@@ -222,11 +222,12 @@ jobs:
 
       - name: Test
         id: ggml-ci
-        shell: C:\msys64\msys2_shell.cmd -defterm -no-start -ucrt64 -here -c "bash -lc '{0}'"
+        shell: C:\msys64\usr\bin\bash.exe --noprofile --norc -eo pipefail "{0}"
         env:
+          MSYSTEM: UCRT64
           CHERE_INVOKING: 1
+          PATH: C:\msys64\ucrt64\bin;C:\msys64\usr\bin;${{ env.PATH }}
         run: |
-          set -euo pipefail
           echo "MSYSTEM=$MSYSTEM"
           echo "PWD=$PWD"
           echo "PATH=$PATH"
