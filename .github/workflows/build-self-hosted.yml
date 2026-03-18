@@ -222,7 +222,7 @@ jobs:
 
       - name: Test
         id: ggml-ci
-        shell: C:\msys64\msys2_shell.cmd -defterm -no-start -ucrt64 -here -c "{0}"
+        shell: C:\msys64\msys2_shell.cmd -defterm -no-start -ucrt64 -here -c "bash -lc '{0}'"
         env:
           CHERE_INVOKING: 1
         run: |
