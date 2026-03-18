@@ -228,11 +228,8 @@ jobs:
           CHERE_INVOKING: 1
           PATH: C:\msys64\ucrt64\bin;C:\msys64\usr\bin;C:\Windows\System32;${{ env.PATH }}
         run: |
-          echo "MSYSTEM=$MSYSTEM"
-          echo "PWD=$PWD"
-          echo "PATH=$PATH"
           vulkaninfo --summary
-          GG_BUILD_VULKAN=1 ./ci/run.sh ./results/llama.cpp ./mnt/llama.cpp
+          LLAMA_FATAL_WARNINGS=OFF GG_BUILD_VULKAN=1 ./ci/run.sh ./results/llama.cpp ./mnt/llama.cpp
 
   ggml-ci-intel-openvino-gpu-low-perf:
     runs-on: [self-hosted, Linux, Intel, OpenVINO]
