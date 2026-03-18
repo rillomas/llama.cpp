@@ -222,7 +222,7 @@ jobs:
 
       - name: Test
         id: ggml-ci
-        shell: msys2 UCRT64
+        shell: ucrt64
         run: |
           vulkaninfo --summary
           GG_BUILD_VULKAN=1 ./ci/run.sh ./results/llama.cpp ./mnt/llama.cpp
