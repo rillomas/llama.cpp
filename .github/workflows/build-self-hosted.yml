@@ -231,7 +231,7 @@ jobs:
           vulkaninfo --summary
           # Skip python related tests with GG_BUILD_LOW_PERF=1 since Windows MSYS2 UCRT64 currently fails to create
           # a valid python environment for testing
-          LLAMA_FATAL_WARNINGS=OFF GG_BUILD_VULKAN=1 GG_BUILD_LOW_PERF=1 ./ci/run.sh ./results/llama.cpp ./mnt/llama.cpp
+          LLAMA_FATAL_WARNINGS=OFF GG_BUILD_NINJA=1 GG_BUILD_VULKAN=1 GG_BUILD_LOW_PERF=1 ./ci/run.sh ./results/llama.cpp ./mnt/llama.cpp
 
   ggml-ci-intel-openvino-gpu-low-perf:
     runs-on: [self-hosted, Linux, Intel, OpenVINO]
