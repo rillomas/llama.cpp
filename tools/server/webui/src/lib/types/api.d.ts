@@ -54,7 +54,7 @@ export interface ApiChatMessageData {
  * Model status object from /models endpoint
  */
 export interface ApiModelStatus {
-	/** Status value: loaded, unloaded, loading, failed */
+	/** Status value: loaded, unloaded, loading, sleeping, failed */
 	value: ServerModelStatus;
 	/** Command line arguments used when loading (only for loaded models) */
 	args?: string[];
@@ -164,7 +164,7 @@ export interface ApiLlamaCppServerProps {
 			chat_format: string;
 			reasoning_format: string;
 			reasoning_in_content: boolean;
-			thinking_forced_open: boolean;
+			generation_prompt: string;
 			samplers: string[];
 			backend_sampling: boolean;
 			'speculative.n_max': number;
@@ -332,7 +332,7 @@ export interface ApiSlotData {
 		chat_format: string;
 		reasoning_format: string;
 		reasoning_in_content: boolean;
-		thinking_forced_open: boolean;
+		generation_prompt: string;
 		samplers: string[];
 		backend_sampling: boolean;
 		'speculative.n_max': number;
