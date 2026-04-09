@@ -12,6 +12,12 @@ struct clip_graph_siglip : clip_graph {
     ggml_cgraph * build() override;
 };
 
+struct clip_graph_gemma4v : clip_graph {
+    clip_graph_gemma4v(clip_ctx * ctx, const clip_image_f32 & img) : clip_graph(ctx, img) {}
+    ggml_cgraph * build() override;
+    ggml_tensor * build_mm(ggml_tensor * w, ggml_tensor * x) const override;
+};
+
 struct clip_graph_pixtral : clip_graph {
     clip_graph_pixtral(clip_ctx * ctx, const clip_image_f32 & img) : clip_graph(ctx, img) {}
     ggml_cgraph * build() override;
@@ -24,6 +30,11 @@ struct clip_graph_qwen2vl : clip_graph {
 
 struct clip_graph_qwen3vl : clip_graph {
     clip_graph_qwen3vl(clip_ctx * ctx, const clip_image_f32 & img) : clip_graph(ctx, img) {}
+    ggml_cgraph * build() override;
+};
+
+struct clip_graph_step3vl : clip_graph {
+    clip_graph_step3vl(clip_ctx * ctx, const clip_image_f32 & img) : clip_graph(ctx, img) {}
     ggml_cgraph * build() override;
 };
 
@@ -42,6 +53,11 @@ struct clip_graph_internvl : clip_graph {
     ggml_cgraph * build() override;
 };
 
+struct clip_graph_nemotron_v2_vl : clip_graph {
+    clip_graph_nemotron_v2_vl(clip_ctx * ctx, const clip_image_f32 & img) : clip_graph(ctx, img) {}
+    ggml_cgraph * build() override;
+};
+
 struct clip_graph_llama4 : clip_graph {
     clip_graph_llama4(clip_ctx * ctx, const clip_image_f32 & img) : clip_graph(ctx, img) {}
     ggml_cgraph * build() override;
@@ -49,6 +65,11 @@ struct clip_graph_llama4 : clip_graph {
 
 struct clip_graph_kimivl : clip_graph {
     clip_graph_kimivl(clip_ctx * ctx, const clip_image_f32 & img) : clip_graph(ctx, img) {}
+    ggml_cgraph * build() override;
+};
+
+struct clip_graph_paddleocr : clip_graph {
+    clip_graph_paddleocr(clip_ctx * ctx, const clip_image_f32 & img) : clip_graph(ctx, img) {}
     ggml_cgraph * build() override;
 };
 
@@ -67,6 +88,11 @@ struct clip_graph_whisper_enc : clip_graph {
     ggml_cgraph * build() override;
 };
 
+struct clip_graph_deepseekocr : clip_graph {
+    clip_graph_deepseekocr(clip_ctx * ctx, const clip_image_f32 & img) : clip_graph(ctx, img) {}
+    ggml_cgraph * build() override;
+};
+
 struct clip_graph_conformer : clip_graph {
     clip_graph_conformer(clip_ctx * ctx, const clip_image_f32 & img) : clip_graph(ctx, img) {}
     ggml_cgraph * build() override;
@@ -74,6 +100,11 @@ struct clip_graph_conformer : clip_graph {
 
 struct clip_graph_glm4v : clip_graph {
     clip_graph_glm4v(clip_ctx * ctx, const clip_image_f32 & img) : clip_graph(ctx, img) {}
+    ggml_cgraph * build() override;
+};
+
+struct clip_graph_hunyuanocr : clip_graph {
+    clip_graph_hunyuanocr(clip_ctx * ctx, const clip_image_f32 & img) : clip_graph(ctx, img) {}
     ggml_cgraph * build() override;
 };
 
@@ -108,4 +139,11 @@ struct clip_graph_mobilenetv5 : clip_graph {
     ggml_tensor * build_mobilenet_attn(
         ggml_tensor * inp,
         const mobilenetv5_block & block);
+};
+
+struct clip_graph_kimik25 : clip_graph {
+    clip_graph_kimik25(clip_ctx * ctx, const clip_image_f32 & img) : clip_graph(ctx, img) {}
+    ggml_cgraph * build() override;
+
+    ggml_tensor * resize_position_embeddings_3d(uint32_t interpolation_mode);
 };
