@@ -2134,10 +2134,6 @@ static void ggml_vk_create_pipeline_func(vk_device& device, vk_pipeline& pipelin
     GGML_ASSERT(parameter_count <= MAX_PARAMETER_COUNT);
     GGML_ASSERT(wg_denoms[0] > 0 && wg_denoms[1] > 0 && wg_denoms[2] > 0); // NOLINT
 
-    //if (pipeline->name == "matmul_id_subgroup_q4_k_f32_f16acc_aligned_l") {
-    //    std::cout << "here" << std::endl;
-    //}
-
     vk::ShaderModuleCreateInfo shader_module_create_info({}, spv_size, reinterpret_cast<const uint32_t *>(spv_data));
     pipeline->shader_module = device->device.createShaderModule(shader_module_create_info);
 
