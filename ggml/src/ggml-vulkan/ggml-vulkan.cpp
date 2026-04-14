@@ -3160,22 +3160,27 @@ static const std::unordered_map<std::string, PipelineConfigParameter> rdna2_pipe
 static constexpr uint32_t RDNA_DEFAULT_SUBGROUP_SIZE = 32;
 
 
-static std::vector<uint32_t> calc_specialization_constant_intel_xe2_onward(const PipelineConfigParameter& config, const std::vector<uint32_t>& current) {
-    std::vector<uint32_t> output = current;
-    // replacing subgroup_size_8 with current subgroup size for m_warptile_mmq
-    output[4] = config.subgroup_size;
-    output[10] = config.subgroup_size;
-    return output;
-}
+//static std::vector<uint32_t> calc_specialization_constant_intel_xe2_onward(const PipelineConfigParameter& config, const std::vector<uint32_t>& current) {
+//    std::vector<uint32_t> output = current;
+//    // replacing subgroup_size_8 with current subgroup size for m_warptile_mmq
+//    output[4] = config.subgroup_size;
+//    output[10] = config.subgroup_size;
+//    return output;
+//}
+//
+//static const std::unordered_map<std::string, PipelineConfigParameter> xe2_onward_pipelines = {
+//    {"matmul_id_subgroup_q4_k_f32_f16acc_aligned_m", {16, {}, calc_specialization_constant_intel_xe2_onward}},
+//    {"matmul_id_subgroup_q6_k_f32_f16acc_aligned_m", {16, {}, calc_specialization_constant_intel_xe2_onward}},
+//};
 
-static const std::unordered_map<std::string, PipelineConfigParameter> xe2_onward_pipelines = {
-    {"matmul_id_subgroup_q4_k_f32_f16acc_aligned_m", {16, {}, calc_specialization_constant_intel_xe2_onward}},
-    {"matmul_id_subgroup_q6_k_f32_f16acc_aligned_m", {16, {}, calc_specialization_constant_intel_xe2_onward}},
-};
+static bool is_intel(const vk_device_architecture& arch) {
+    return arch == vk_device_architecture::INTEL_PRE_XE2 ||
+        arch == vk_device_architecture::INTEL_XE2_ONWARD;
+}
 
 // Intel GPU can use subgroup 8, 16, or 32 depending on architeture.
 // Pre-Xe2 is 8, 16, or 32. Xe2 onward is 16 or 32. 32 is the default if nothing is specified.
-static constexpr uint32_t INTEL_DEFAULT_SUBGROUP_SIZE = 16;
+static constexpr uint32_t INTEL_DEFAULT_SUBGROUP_SIZE = 32;
 
 // Define configurations for different GPUs.
 static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {
@@ -3202,16 +3207,26 @@ static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {
     {
         vk_device_architecture::INTEL_XE2_ONWARD,
         {
-            xe2_onward_pipelines,
+            //xe2_onward_pipelines,
         },
         INTEL_DEFAULT_SUBGROUP_SIZE
     }
 };
 
 static bool get_gpu_pipeline_config(GpuPipelineConfig* output, const vk_device_architecture& arch) {
+    const char* GGML_VK_INTEL_DEFAULT_SUBGROUP_SIZE = getenv("GGML_VK_INTEL_DEFAULT_SUBGROUP_SIZE");
+    uint32_t intel_default_subgroup_size = 0;
+    if (GGML_VK_INTEL_DEFAULT_SUBGROUP_SIZE != nullptr) {
+        intel_default_subgroup_size = std::stoul(GGML_VK_INTEL_DEFAULT_SUBGROUP_SIZE);
+    }
+
     for (const auto & config : gpu_pipeline_configs) {
         if (config.arch == arch) {
             *output = config;
+            if (is_intel(arch) && intel_default_subgroup_size) {
+                // force specified subgroup size when given
+                output->default_subgroup_size = intel_default_subgroup_size;
+            }
             return true;
         }
     }
@@ -3440,10 +3455,6 @@ static void ggml_vk_load_shaders(vk_device& device) {
     auto const &ggml_vk_create_pipeline = [&](vk_device& device, vk_pipeline& base_pipeline, const char *name, size_t spv_size, const void* spv_data, const char *entrypoint,
                                               uint32_t parameter_count, uint32_t push_constant_size, std::array<uint32_t, 3> wg_denoms, const std::vector<uint32_t>& specialization_constants,
                                               uint32_t align, bool disable_robustness = false, bool require_full_subgroups = false, uint32_t required_subgroup_size = 0) {
-        //if (std::string(name) == "matmul_id_subgroup_q4_k_f32_f16acc_aligned_l") {
-        //    std::cout << "here" << std::endl;
-        //}
-
         // Override subgroup size and specialization constant based on pipeline name
         GpuPipelineConfig gpu_config = {};
         PipelineConfigParameter pipeline_param = {};
