@@ -11512,7 +11512,7 @@ static void ggml_vk_argsort(ggml_backend_vk_context * ctx, vk_context& subctx, c
     }
 }
 
-static vk_pipeline ggml_vk_find_topk_pipeline(vk_pipeline pipelines[num_topk_pipelines], uint32_t min_pipeline, uint32_t preferred_idx, uint32_t max_pipeline, uint32_t& selected_idx) {
+static vk_pipeline ggml_vk_find_topk_pipeline(vk_pipeline* pipelines, uint32_t min_pipeline, uint32_t preferred_idx, uint32_t max_pipeline, uint32_t& selected_idx) {
     selected_idx = std::min(preferred_idx, max_pipeline);
     selected_idx = std::max(selected_idx, min_pipeline);
 
