@@ -3157,18 +3157,25 @@ static const std::unordered_map<std::string, PipelineConfigParameter> rdna2_pipe
 static constexpr uint32_t RDNA_DEFAULT_SUBGROUP_SIZE = 32;
 
 
-//static std::vector<uint32_t> calc_specialization_constant_intel_xe2_onward(const PipelineConfigParameter& config, const std::vector<uint32_t>& current) {
-//    std::vector<uint32_t> output = current;
-//    // replacing subgroup_size_8 with current subgroup size for m_warptile_mmq
-//    output[4] = config.subgroup_size;
-//    output[10] = config.subgroup_size;
-//    return output;
-//}
-//
-//static const std::unordered_map<std::string, PipelineConfigParameter> xe2_onward_pipelines = {
-//    {"matmul_id_subgroup_q4_k_f32_f16acc_aligned_m", {16, {}, calc_specialization_constant_intel_xe2_onward}},
-//    {"matmul_id_subgroup_q6_k_f32_f16acc_aligned_m", {16, {}, calc_specialization_constant_intel_xe2_onward}},
-//};
+static std::vector<uint32_t> calc_specialization_constant_intel_xe2_onward_warptile(const PipelineConfigParameter& config, const std::vector<uint32_t>& current) {
+    GGML_ASSERT(current.size() == 11); // assuming *_warptile constants
+    std::vector<uint32_t> output = current;
+    // replacing subgroup_size_8 with current subgroup size
+    output[4] = config.subgroup_size;
+    output[10] = config.subgroup_size;
+    return output;
+}
+
+static const std::unordered_map<std::string, PipelineConfigParameter> xe2_onward_pipelines = {
+    {"matmul_id_subgroup_q4_k_f32_f16acc_aligned_s", {16, {}, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_id_subgroup_q4_0_f32_f16acc_aligned_m", {16, {}, calc_specialization_constant_intel_xe2_onward_warptile}},
+    //{"matmul_id_subgroup_q6_k_f32_f16acc_aligned_m", {16, {}, calc_specialization_constant_intel_xe2_onward}},
+    //{"matmul_id_subgroup_iq2_xs_f32_f16acc_aligned_s", {16, {}, calc_specialization_constant_intel_xe2_onward}},
+    //{"matmul_id_subgroup_q8_0_f32_f16acc_aligned_s", {16, {}, calc_specialization_constant_intel_xe2_onward}},
+    //{"matmul_id_subgroup_q8_0_f32_f16acc_aligned_m", {16, {}, calc_specialization_constant_intel_xe2_onward}},
+    //{"mul_mat_vec_id_q8_0_q8_1_f32", {16, {}, calc_specialization_constant_intel_xe2_onward}},
+    {"matmul_bf16_aligned_l", {16, {}, calc_specialization_constant_intel_xe2_onward_warptile}},
+};
 
 static bool is_intel(const vk_device_architecture& arch) {
     return arch == vk_device_architecture::INTEL_PRE_XE2 ||
@@ -3204,13 +3211,16 @@ static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {
     {
         vk_device_architecture::INTEL_XE2_ONWARD,
         {
-            //xe2_onward_pipelines,
+            xe2_onward_pipelines,
         },
         INTEL_DEFAULT_SUBGROUP_SIZE
     }
 };
 
 static bool get_gpu_pipeline_config(GpuPipelineConfig* output, const vk_device_architecture& arch) {
+    if (getenv("GGML_VK_DISABLE_PIPELINE_CONFIG_OVERRIDE")) {
+        return false;
+    }
     const char* GGML_VK_INTEL_DEFAULT_SUBGROUP_SIZE = getenv("GGML_VK_INTEL_DEFAULT_SUBGROUP_SIZE");
     uint32_t intel_default_subgroup_size = 0;
     if (GGML_VK_INTEL_DEFAULT_SUBGROUP_SIZE != nullptr) {
