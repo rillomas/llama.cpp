@@ -39,7 +39,6 @@ DispatchLoaderDynamic & ggml_vk_default_dispatcher();
 #include <mutex>
 #include <future>
 #include <thread>
-#include <optional>
 
 #if defined(_MSC_VER)
 # define NOMINMAX 1
