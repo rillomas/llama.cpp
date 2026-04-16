@@ -3111,9 +3111,6 @@ static bool ggml_vk_matmul_shmem_support(const vk_device& device, const std::vec
 // A specific pipeline's configuration
 struct PipelineConfigParameter {
     uint32_t subgroup_size;
-    // True if we require full subgroup for this pipeline,
-    // False if not required. Empty means don't care (use default)
-    std::optional<bool> require_full_subgroup;
     // Calculate specialization constants used for a specific pipeline.
     // If empty we use the default.
     // Some kernels must calculate specialization constants
@@ -3167,14 +3164,14 @@ static std::vector<uint32_t> calc_specialization_constant_intel_xe2_onward_warpt
 }
 
 static const std::unordered_map<std::string, PipelineConfigParameter> xe2_onward_pipelines = {
-    {"matmul_id_subgroup_q4_k_f32_f16acc_aligned_s", {16, {}, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_q4_0_f32_f16acc_aligned_m", {16, {}, calc_specialization_constant_intel_xe2_onward_warptile}},
-    //{"matmul_id_subgroup_q6_k_f32_f16acc_aligned_m", {16, {}, calc_specialization_constant_intel_xe2_onward}},
-    //{"matmul_id_subgroup_iq2_xs_f32_f16acc_aligned_s", {16, {}, calc_specialization_constant_intel_xe2_onward}},
-    //{"matmul_id_subgroup_q8_0_f32_f16acc_aligned_s", {16, {}, calc_specialization_constant_intel_xe2_onward}},
-    //{"matmul_id_subgroup_q8_0_f32_f16acc_aligned_m", {16, {}, calc_specialization_constant_intel_xe2_onward}},
-    //{"mul_mat_vec_id_q8_0_q8_1_f32", {16, {}, calc_specialization_constant_intel_xe2_onward}},
-    {"matmul_bf16_aligned_l", {16, {}, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_id_subgroup_q4_k_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_id_subgroup_q4_0_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    //{"matmul_id_subgroup_q6_k_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward}},
+    //{"matmul_id_subgroup_iq2_xs_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward}},
+    //{"matmul_id_subgroup_q8_0_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward}},
+    //{"matmul_id_subgroup_q8_0_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward}},
+    //{"mul_mat_vec_id_q8_0_q8_1_f32", {16, calc_specialization_constant_intel_xe2_onward}},
+    {"matmul_bf16_aligned_l", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
 };
 
 static bool is_intel(const vk_device_architecture& arch) {
@@ -3477,9 +3474,6 @@ static void ggml_vk_load_shaders(vk_device& device) {
             // We overwrite all valid parameters assuming the setting creator knows what they are doing.
             if (pipeline_param.subgroup_size) {
                 required_subgroup_size = pipeline_param.subgroup_size;
-            }
-            if (pipeline_param.require_full_subgroup.has_value()) {
-                require_full_subgroups = pipeline_param.require_full_subgroup.value();
             }
             if (pipeline_param.calc_specialization_constants) {
                 target_specilization_constants = pipeline_param.calc_specialization_constants(pipeline_param, specialization_constants);
