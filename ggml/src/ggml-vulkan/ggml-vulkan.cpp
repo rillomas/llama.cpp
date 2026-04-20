@@ -6607,6 +6607,7 @@ static void ggml_vk_dispatch_pipeline(ggml_backend_vk_context* ctx, vk_context& 
         std::cerr << "(" << buffer.buffer << ", " << buffer.offset << ", " << buffer.range << "), ";
     }
     std::cerr << "}, (" << wg0 << "," << wg1 << "," << wg2 << "))");
+    std::cout << pipeline->name << std::endl;
     GGML_ASSERT(wg0 <= ctx->device->properties.limits.maxComputeWorkGroupCount[0] &&
                 wg1 <= ctx->device->properties.limits.maxComputeWorkGroupCount[1] &&
                 wg2 <= ctx->device->properties.limits.maxComputeWorkGroupCount[2]);
@@ -13410,6 +13411,14 @@ static void ggml_vk_compute_forward(ggml_backend_vk_context * ctx, ggml_cgraph *
 #ifdef GGML_VULKAN_CHECK_RESULTS
         ggml_vk_check_results_0(ctx, cgraph, tensor_idx);
 #endif
+        if (tensor->op == GGML_OP_MUL_MAT) {
+            static size_t counter=0;
+            counter++;
+            GGML_LOG_INFO("ggml_vk_compute_forward: %s (%zu)\n", ggml_op_name(tensor->op), counter);
+        }
+        else {
+            GGML_LOG_INFO("ggml_vk_compute_forward: %s\n", ggml_op_name(tensor->op));
+        }
 
         // Do staging buffer copies
         for (auto& cpy : subctx->in_memcpys) {
@@ -13427,6 +13436,7 @@ static void ggml_vk_compute_forward(ggml_backend_vk_context * ctx, ggml_cgraph *
             ggml_vk_submit(subctx, {});
         }
         ctx->submit_pending = true;
+        ggml_vk_synchronize(ctx);
 
 #ifdef GGML_VULKAN_CHECK_RESULTS
         ggml_vk_synchronize(ctx);
@@ -14508,7 +14518,7 @@ static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cg
     // Estimate the amount of matmul work by looking at the weight matrix size, and submit every 100MB
     // (and scaled down based on model size, so smaller models submit earlier).
     // Also submit at least every 100 nodes, in case there are workloads without as much matmul.
-    int nodes_per_submit = 100;
+    int nodes_per_submit = 1;
     int submitted_nodes = 0;
     int submit_count = 0;
     uint64_t mul_mat_bytes = 0;
