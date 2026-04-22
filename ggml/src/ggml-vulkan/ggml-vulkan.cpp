@@ -2138,6 +2138,7 @@ static void ggml_vk_create_pipeline_func(vk_device& device, vk_pipeline& pipelin
     GGML_ASSERT(wg_denoms[0] > 0 && wg_denoms[1] > 0 && wg_denoms[2] > 0); // NOLINT
 
     vk::ShaderModuleCreateInfo shader_module_create_info({}, spv_size, reinterpret_cast<const uint32_t *>(spv_data));
+    std::cout << pipeline->name << ": SPIR-V size " << spv_size << " bytes" << std::endl;
 
     // Patch SPIR-V to enable RTE rounding for FP16, avoiding the need for
     // separate shader variants compiled with -DRTE16.
@@ -13415,14 +13416,14 @@ static void ggml_vk_compute_forward(ggml_backend_vk_context * ctx, ggml_cgraph *
 #ifdef GGML_VULKAN_CHECK_RESULTS
         ggml_vk_check_results_0(ctx, cgraph, tensor_idx);
 #endif
-        // if (tensor->op == GGML_OP_MUL_MAT) {
-        //     static size_t counter=0;
-        //     counter++;
-        //     GGML_LOG_INFO("ggml_vk_compute_forward: %s (%zu)\n", ggml_op_name(tensor->op), counter);
-        // }
-        // else {
-        //     GGML_LOG_INFO("ggml_vk_compute_forward: %s\n", ggml_op_name(tensor->op));
-        // }
+        if (tensor->op == GGML_OP_MUL_MAT) {
+            static size_t counter=0;
+            counter++;
+            GGML_LOG_INFO("ggml_vk_compute_forward: %s (%zu)\n", ggml_op_name(tensor->op), counter);
+        }
+        else {
+            GGML_LOG_INFO("ggml_vk_compute_forward: %s\n", ggml_op_name(tensor->op));
+        }
 
         // Do staging buffer copies
         for (auto& cpy : subctx->in_memcpys) {
