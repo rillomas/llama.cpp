@@ -6607,7 +6607,11 @@ static void ggml_vk_dispatch_pipeline(ggml_backend_vk_context* ctx, vk_context& 
         std::cerr << "(" << buffer.buffer << ", " << buffer.offset << ", " << buffer.range << "), ";
     }
     std::cerr << "}, (" << wg0 << "," << wg1 << "," << wg2 << "))");
-    std::cout << pipeline->name << std::endl;
+    static std::string previous_pipeline;
+    if (pipeline->name != previous_pipeline) {
+        std::cout << pipeline->name << std::endl;
+        previous_pipeline = pipeline->name;
+    }
     GGML_ASSERT(wg0 <= ctx->device->properties.limits.maxComputeWorkGroupCount[0] &&
                 wg1 <= ctx->device->properties.limits.maxComputeWorkGroupCount[1] &&
                 wg2 <= ctx->device->properties.limits.maxComputeWorkGroupCount[2]);
@@ -13411,14 +13415,14 @@ static void ggml_vk_compute_forward(ggml_backend_vk_context * ctx, ggml_cgraph *
 #ifdef GGML_VULKAN_CHECK_RESULTS
         ggml_vk_check_results_0(ctx, cgraph, tensor_idx);
 #endif
-        if (tensor->op == GGML_OP_MUL_MAT) {
-            static size_t counter=0;
-            counter++;
-            GGML_LOG_INFO("ggml_vk_compute_forward: %s (%zu)\n", ggml_op_name(tensor->op), counter);
-        }
-        else {
-            GGML_LOG_INFO("ggml_vk_compute_forward: %s\n", ggml_op_name(tensor->op));
-        }
+        // if (tensor->op == GGML_OP_MUL_MAT) {
+        //     static size_t counter=0;
+        //     counter++;
+        //     GGML_LOG_INFO("ggml_vk_compute_forward: %s (%zu)\n", ggml_op_name(tensor->op), counter);
+        // }
+        // else {
+        //     GGML_LOG_INFO("ggml_vk_compute_forward: %s\n", ggml_op_name(tensor->op));
+        // }
 
         // Do staging buffer copies
         for (auto& cpy : subctx->in_memcpys) {
