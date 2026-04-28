@@ -21,6 +21,13 @@
 #    include <unistd.h>
 #endif // defined(_WIN32)
 
+// #define DEBUG_LOGGER
+#ifdef DEBUG_LOGGER
+#define DEBUG_LOG(...) printf(__VA_ARGS__)
+#else
+#define DEBUG_LOG(...) do {} while(0)
+#endif
+
 int common_log_verbosity_thold = LOG_DEFAULT_LLAMA;
 
 int common_log_get_verbosity_thold(void) {
@@ -126,6 +133,7 @@ struct common_log {
     common_log() : common_log(256) {}
 
     common_log(size_t capacity) {
+        DEBUG_LOG("log: Constructing: capacity: %zu\n", capacity);
         file = nullptr;
         prefix = false;
         timestamps = false;
@@ -145,10 +153,12 @@ struct common_log {
     }
 
     ~common_log() {
+        DEBUG_LOG("log: Destructing: head: %zu, tail: %zu\n", head, tail);
         pause();
         if (file) {
             fclose(file);
         }
+        DEBUG_LOG("log: Destructed\n");
     }
 
 private:
@@ -247,11 +257,11 @@ public:
 
             entries = std::move(new_entries);
         }
-
         cv.notify_one();
     }
 
     void resume() {
+        DEBUG_LOG("log: Resuming\n");
         std::lock_guard<std::mutex> lock(mtx);
 
         if (running) {
@@ -261,17 +271,20 @@ public:
         running = true;
 
         thrd = std::thread([this]() {
+            DEBUG_LOG("thread: Starting\n");
             while (true) {
                 {
                     std::unique_lock<std::mutex> lock(mtx);
+                    // DEBUG_LOG("thread: Waiting: this=%p\n", (void*)this);
                     cv.wait(lock, [this]() { return head != tail; });
-
+                    DEBUG_LOG("thread: Got Item: head=%zu\n", head);
                     cur = entries[head];
 
                     head = (head + 1) % entries.size();
                 }
 
                 if (cur.is_end) {
+                    DEBUG_LOG("thread: Breaking\n");
                     break;
                 }
 
@@ -281,10 +294,12 @@ public:
                     cur.print(file);
                 }
             }
+            DEBUG_LOG("thread: Exiting\n");
         });
     }
 
     void pause() {
+        DEBUG_LOG("log: Pausing\n");
         {
             std::lock_guard<std::mutex> lock(mtx);
 
@@ -301,14 +316,17 @@ public:
 
                 tail = (tail + 1) % entries.size();
             }
-
+            DEBUG_LOG("log: notify head: %zu tail: %zu\n", head, tail);
             cv.notify_one();
         }
 
+        DEBUG_LOG("log: Joining: this=%p\n", (void*)this);
         thrd.join();
+        DEBUG_LOG("log: Joined: this=%p\n", (void*)this);
     }
 
     void set_file(const char * path) {
+        DEBUG_LOG("log: set_file\n");
         pause();
 
         if (file) {
@@ -325,6 +343,7 @@ public:
     }
 
     void set_colors(bool colors) {
+        DEBUG_LOG("log: set_colors\n");
         pause();
 
         if (colors) {
@@ -379,10 +398,12 @@ struct common_log * common_log_main() {
 }
 
 void common_log_pause(struct common_log * log) {
+    DEBUG_LOG("log: common_log_pause\n");
     log->pause();
 }
 
 void common_log_resume(struct common_log * log) {
+    DEBUG_LOG("log: common_log_resume\n");
     log->resume();
 }
 
@@ -425,8 +446,10 @@ void common_log_set_timestamps(struct common_log * log, bool timestamps) {
 }
 
 void common_log_flush(struct common_log * log) {
+    DEBUG_LOG("log: common_log_flush\n");
     log->pause();
     log->resume();
+    DEBUG_LOG("log: flushed\n");
 }
 
 static int common_get_verbosity(enum ggml_log_level level) {
