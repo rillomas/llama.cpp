@@ -1452,7 +1452,7 @@ struct test_case {
         return test_passed ? test_status_t::OK : test_status_t::FAIL;
     }
 
-    bool eval_perf(ggml_backend_t backend, const char * op_names_filter, printer * output_printer) {
+    bool eval_perf(ggml_backend_t backend, const char * op_names_filter, printer * output_printer, int fixed_n_runs = 0) {
         mode = MODE_PERF;
 
         static const size_t graph_nodes = 8192;
@@ -1505,22 +1505,31 @@ struct test_case {
         }
 
         // determine number of runs
+        const int64_t max_graph_runs = ggml_graph_size(gf) - ggml_graph_n_nodes(gf) + 1;
         int n_runs;
-        bool is_cpu = ggml_backend_dev_type(ggml_backend_get_device(backend)) == GGML_BACKEND_DEVICE_TYPE_CPU;
-        if (op_flops(out) > 0) {
-            // based on flops
-            const uint64_t GFLOP = 1000 * 1000 * 1000;
-            const uint64_t target_flops_cpu =   8ULL * GFLOP;
-            const uint64_t target_flops_gpu = 100ULL * GFLOP;
-            uint64_t target_flops = is_cpu ? target_flops_cpu : target_flops_gpu;
-            n_runs = (int)std::min<int64_t>(ggml_graph_size(gf) - ggml_graph_n_nodes(gf), target_flops / op_flops(out)) + 1;
+        if (fixed_n_runs > 0) {
+            if (fixed_n_runs > max_graph_runs) {
+                fprintf(stderr, "%s: requested --n-runs=%d exceeds graph capacity (%lld)\n", __func__, fixed_n_runs, (long long) max_graph_runs);
+                return false;
+            }
+            n_runs = fixed_n_runs;
         } else {
-            // based on memory size
-            const size_t GB = 1ULL << 30;
-            const size_t target_size_cpu =  8 * GB;
-            const size_t target_size_gpu = 32 * GB;
-            size_t target_size = is_cpu ? target_size_cpu : target_size_gpu;
-            n_runs = (int)std::min<int64_t>(ggml_graph_size(gf) - ggml_graph_n_nodes(gf), target_size / op_size(out)) + 1;
+            bool is_cpu = ggml_backend_dev_type(ggml_backend_get_device(backend)) == GGML_BACKEND_DEVICE_TYPE_CPU;
+            if (op_flops(out) > 0) {
+                // based on flops
+                const uint64_t GFLOP = 1000 * 1000 * 1000;
+                const uint64_t target_flops_cpu =   8ULL * GFLOP;
+                const uint64_t target_flops_gpu = 100ULL * GFLOP;
+                uint64_t target_flops = is_cpu ? target_flops_cpu : target_flops_gpu;
+                n_runs = (int)std::min<int64_t>(max_graph_runs - 1, target_flops / op_flops(out)) + 1;
+            } else {
+                // based on memory size
+                const size_t GB = 1ULL << 30;
+                const size_t target_size_cpu =  8 * GB;
+                const size_t target_size_gpu = 32 * GB;
+                size_t target_size = is_cpu ? target_size_cpu : target_size_gpu;
+                n_runs = (int)std::min<int64_t>(max_graph_runs - 1, target_size / op_size(out)) + 1;
+            }
         }
 
         // duplicate the op
@@ -1563,7 +1572,7 @@ struct test_case {
             total_time_us += end_time - start_time;
             total_mem += mem;
             total_runs += n_runs;
-        } while (total_time_us < 1000*1000); // run for at least 1 second
+        } while (fixed_n_runs <= 0 && total_time_us < 1000*1000); // run for at least 1 second unless a fixed run count is requested
 
         // Create test result
         double avg_time_us      = (double) total_time_us / total_runs;
@@ -9038,7 +9047,7 @@ static std::vector<std::unique_ptr<test_case>> make_test_cases_perf() {
     test_cases.emplace_back(new test_cumsum(GGML_TYPE_F32, { 2048, 16, 5, 4 }));
     test_cases.emplace_back(new test_cumsum(GGML_TYPE_F32, { 20000, 10, 4, 1 }));
 
-    for (int bs : {1, 2, 3, 4, 5, 8, 512}) {
+    for (int bs : {1, 2, 3, 4, 5, 8, 16, 32, 64, 128, 256, 512}) {
         for (ggml_type type_a : all_types) {
             for (ggml_type type_b : {GGML_TYPE_F32}) {
                 test_cases.emplace_back(new test_mul_mat(type_a, type_b, 4096, bs, 14336, {1,  1}, {1, 1}));
@@ -9277,7 +9286,7 @@ static std::vector<std::unique_ptr<test_case>> make_test_cases_from_file(const c
 }
 
 static bool test_backend(ggml_backend_t backend, test_mode mode, const char * op_names_filter, const char * params_filter,
-                         printer * output_printer, const char * test_file_path) {
+                         printer * output_printer, const char * test_file_path, int fixed_n_runs = 0) {
     auto filter_test_cases = [](std::vector<std::unique_ptr<test_case>> & test_cases, const char * params_filter) {
         if (params_filter == nullptr) {
             return;
@@ -9367,7 +9376,7 @@ static bool test_backend(ggml_backend_t backend, test_mode mode, const char * op
 
     if (mode == MODE_PERF) {
         for (auto & test : test_cases) {
-            test->eval_perf(backend, op_names_filter, output_printer);
+            test->eval_perf(backend, op_names_filter, output_printer, fixed_n_runs);
         }
         return true;
     }
@@ -9491,7 +9500,7 @@ static void show_test_coverage() {
 }
 
 static void usage(char ** argv) {
-    printf("Usage: %s [mode] [-o <op,..>] [-b <backend>] [-p <params regex>] [--output <console|sql|csv>] [--list-ops]", argv[0]);
+    printf("Usage: %s [mode] [-o <op,..>] [-b <backend>] [-p <params regex>] [--n-runs <count>] [--output <console|sql|csv>] [--list-ops]", argv[0]);
     printf(" [--show-coverage] [--test-file <path>]\n");
     printf("    valid modes:\n");
     printf("      - test (default, compare with CPU backend for correctness)\n");
@@ -9501,6 +9510,7 @@ static void usage(char ** argv) {
     printf("    op names for -o are as given by ggml_op_desc() (e.g. ADD, MUL_MAT, etc),\n");
     printf("        optionally including the full test case string (e.g. \"ADD(type=f16,ne=[1,1,8,1],nr=[1,1,1,1],nf=1)\")\n");
     printf("    --output specifies output format (default: console, options: console, sql, csv)\n");
+    printf("    --n-runs sets an exact iteration count for perf mode instead of the default auto-sized 1 second run\n");
     printf("    --list-ops lists all available GGML operations\n");
     printf("    --show-coverage shows test coverage\n");
     printf("    --test-file reads test operators from a test file generated by llama-export-graph-ops\n");
@@ -9513,6 +9523,7 @@ int main(int argc, char ** argv) {
     const char * backend_filter = nullptr;
     const char * params_filter = nullptr;
     const char * test_file_path = nullptr;
+    int fixed_n_runs = 0;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "test") == 0) {
@@ -9540,6 +9551,19 @@ int main(int argc, char ** argv) {
         } else if (strcmp(argv[i], "-p") == 0) {
             if (i + 1 < argc) {
                 params_filter = argv[++i];
+            } else {
+                usage(argv);
+                return 1;
+            }
+        } else if (strcmp(argv[i], "--n-runs") == 0) {
+            if (i + 1 < argc) {
+                char * end = nullptr;
+                long parsed = strtol(argv[++i], &end, 10);
+                if (end == argv[i] || *end != '\0' || parsed <= 0 || parsed > INT32_MAX) {
+                    usage(argv);
+                    return 1;
+                }
+                fixed_n_runs = (int) parsed;
             } else {
                 usage(argv);
                 return 1;
@@ -9619,7 +9643,7 @@ int main(int argc, char ** argv) {
                                                              false, "", ggml_backend_dev_description(dev),
                                                              total / 1024 / 1024, free / 1024 / 1024, true));
 
-        bool ok = test_backend(backend, mode, op_names_filter, params_filter, output_printer.get(), test_file_path);
+        bool ok = test_backend(backend, mode, op_names_filter, params_filter, output_printer.get(), test_file_path, fixed_n_runs);
 
         if (ok) {
             n_ok++;
