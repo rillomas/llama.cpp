@@ -3486,7 +3486,7 @@ static void ggml_vk_load_shaders(vk_device& device) {
     const uint32_t subgroup_size_16 = std::max(default_subgroup_size, 16u);
     const uint32_t subgroup_size_32 = std::max(default_subgroup_size, 32u);
 
-    const uint32_t mul_mat_subgroup_size = (device->vendor_id == VK_VENDOR_ID_INTEL && device->subgroup_size_control) ? device->subgroup_min_size : default_subgroup_size;
+    const uint32_t mul_mat_subgroup_size = default_subgroup_size;
     const uint32_t mul_mat_subgroup_size_8 = std::max(mul_mat_subgroup_size, 8u);
     const uint32_t mul_mat_subgroup_size_16 = std::max(mul_mat_subgroup_size, 16u);
     const uint32_t mul_mat_subgroup_size_32 = std::max(mul_mat_subgroup_size, 32u);
@@ -3581,7 +3581,7 @@ static void ggml_vk_load_shaders(vk_device& device) {
 
         l_warptile_id = { 128,                      128, 128, 16, warptile_id_size * 2, 64, 2, tm_l, tn_l, tk_l, warptile_id_size };
         m_warptile_id = { 128,                       64,  64, 16, warptile_id_size,     32, 2, tm_m, tn_m, tk_m, warptile_id_size };
-        s_warptile_id = { warptile_id_size,  32,  32, 16, s_warptile_wm,                32, 2, tm_s, tn_s, tk_s, warptile_id_size };
+        s_warptile_id = { warptile_id_size * 2,      32,  32, 16, s_warptile_wm,        32, 2, tm_s, tn_s, tk_s, warptile_id_size };
 
         l_warptile_mmqid = { 128,                       128, 128, 32, mul_mat_subgroup_size_8 * 2, 64, 2, tm_l, tn_l, tk_l, mul_mat_subgroup_size_8 };
         m_warptile_mmqid = { 128,                        64,  64, 32, mul_mat_subgroup_size_8,     32, 2, tm_m, tn_m, tk_m, mul_mat_subgroup_size_8 };
