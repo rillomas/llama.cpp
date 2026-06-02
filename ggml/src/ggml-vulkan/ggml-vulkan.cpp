@@ -3324,7 +3324,7 @@ struct GpuPipelineConfig {
     // True applies config to integrated GPU only.
     // False applies to discrete GPU only.
     // Empty means don't care (apply to both)
-    std::optional<bool> is_integrated;
+    std::optional<bool> for_integrated;
 
     // Mapping of pipeline names to their specific configuration parameters.
     // Example: {"soft_max_f32", {64}}
@@ -3487,8 +3487,8 @@ static bool get_gpu_pipeline_config(GpuPipelineConfig* output, const vk_device_a
 
     for (const auto & config : gpu_pipeline_configs) {
         if (config.arch == arch) {
-            if (config.is_integrated.has_value() && config.is_integrated.value() != is_integrated) {
-                // If is_integrated flag exists the iGPU/dGPU format must also match
+            if (config.for_integrated.has_value() && config.for_integrated.value() != is_integrated) {
+                // If for_integrated flag exists the iGPU/dGPU format must also match
                 continue;
             }
             *output = config;
