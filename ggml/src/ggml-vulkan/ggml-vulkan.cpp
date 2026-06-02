@@ -3363,15 +3363,6 @@ static std::vector<uint32_t> calc_specialization_constant_intel_warptile(const P
     return output;
 }
 
-static std::vector<uint32_t> calc_specialization_constant_intel_mulmat_vec(const PipelineConfigParameter& config, const std::vector<uint32_t>& current) {
-    GGML_ASSERT(current.size() == 3); // assuming mulmat constants
-    std::vector<uint32_t> output = current;
-    // replacing warp size with current subgroup size
-    // output[0] = config.subgroup_size;
-    return output;
-}
-
-
 static const std::unordered_map<std::string, PipelineConfigParameter> pre_xe2_integrated_pipelines = {
     {"matmul_id_subgroup_f16_f32_f16acc_aligned_s", {8, calc_specialization_constant_intel_warptile}},
     {"matmul_id_subgroup_f32_f32_aligned_m", {8, calc_specialization_constant_intel_warptile}},
@@ -3381,17 +3372,17 @@ static const std::unordered_map<std::string, PipelineConfigParameter> pre_xe2_in
     {"matmul_id_subgroup_q4_k_q8_1_s", {8, calc_specialization_constant_intel_warptile}},
     {"matmul_id_subgroup_q6_k_q8_1_s", {8, calc_specialization_constant_intel_warptile}},
     {"matmul_id_subgroup_q8_0_q8_1_s", {8, calc_specialization_constant_intel_warptile}},
-    {"mul_mat_vec_iq2_s_f32_f32", {8, calc_specialization_constant_intel_mulmat_vec}},
-    {"mul_mat_vec_iq2_xs_f32_f32", {8, calc_specialization_constant_intel_mulmat_vec}},
-    {"mul_mat_vec_iq2_xxs_f32_f32", {8, calc_specialization_constant_intel_mulmat_vec}},
-    {"mul_mat_vec_iq3_s_f32_f32", {8, calc_specialization_constant_intel_mulmat_vec}},
-    {"mul_mat_vec_iq3_xxs_f32_f32", {8, calc_specialization_constant_intel_mulmat_vec}},
-    {"mul_mat_vec_iq4_nl_f32_f32", {8, calc_specialization_constant_intel_mulmat_vec}},
-    {"mul_mat_vec_iq4_xs_f32_f32", {8, calc_specialization_constant_intel_mulmat_vec}},
-    {"mul_mat_vec_nvfp4_f32_f32", {8, calc_specialization_constant_intel_mulmat_vec}},
-    {"mul_mat_vec_q2_k_f32_f32", {8, calc_specialization_constant_intel_mulmat_vec}},
-    {"mul_mat_vec_q3_k_f32_f32", {8, calc_specialization_constant_intel_mulmat_vec}},
-    {"mul_mat_vec_q6_k_f32_f32", {8, calc_specialization_constant_intel_mulmat_vec}},
+    {"mul_mat_vec_iq2_s_f32_f32", {8}},
+    {"mul_mat_vec_iq2_xs_f32_f32", {8}},
+    {"mul_mat_vec_iq2_xxs_f32_f32", {8}},
+    {"mul_mat_vec_iq3_s_f32_f32", {8}},
+    {"mul_mat_vec_iq3_xxs_f32_f32", {8}},
+    {"mul_mat_vec_iq4_nl_f32_f32", {8}},
+    {"mul_mat_vec_iq4_xs_f32_f32", {8}},
+    {"mul_mat_vec_nvfp4_f32_f32", {8}},
+    {"mul_mat_vec_q2_k_f32_f32", {8}},
+    {"mul_mat_vec_q3_k_f32_f32", {8}},
+    {"mul_mat_vec_q6_k_f32_f32", {8}},
 };
 
 static const std::unordered_map<std::string, PipelineConfigParameter> pre_xe2_discrete_pipelines = {
@@ -3404,17 +3395,17 @@ static const std::unordered_map<std::string, PipelineConfigParameter> pre_xe2_di
     {"matmul_id_subgroup_q4_k_q8_1_s", {8, calc_specialization_constant_intel_warptile}},
     {"matmul_id_subgroup_q6_k_q8_1_s", {8, calc_specialization_constant_intel_warptile}},
     {"matmul_id_subgroup_q8_0_q8_1_s", {8, calc_specialization_constant_intel_warptile}},
-    {"mul_mat_vec_iq2_s_f32_f32", {8, calc_specialization_constant_intel_mulmat_vec}},
-    {"mul_mat_vec_iq2_xs_f32_f32", {8, calc_specialization_constant_intel_mulmat_vec}},
-    {"mul_mat_vec_iq2_xxs_f32_f32", {8, calc_specialization_constant_intel_mulmat_vec}},
-    {"mul_mat_vec_iq3_s_f32_f32", {8, calc_specialization_constant_intel_mulmat_vec}},
-    {"mul_mat_vec_iq3_xxs_f32_f32", {8, calc_specialization_constant_intel_mulmat_vec}},
-    {"mul_mat_vec_iq4_nl_f32_f32", {8, calc_specialization_constant_intel_mulmat_vec}},
-    {"mul_mat_vec_iq4_xs_f32_f32", {8, calc_specialization_constant_intel_mulmat_vec}},
-    {"mul_mat_vec_nvfp4_f32_f32", {8, calc_specialization_constant_intel_mulmat_vec}},
-    {"mul_mat_vec_q2_k_f32_f32", {8, calc_specialization_constant_intel_mulmat_vec}},
-    {"mul_mat_vec_q3_k_f32_f32", {8, calc_specialization_constant_intel_mulmat_vec}},
-    {"mul_mat_vec_q6_k_f32_f32", {8, calc_specialization_constant_intel_mulmat_vec}},
+    {"mul_mat_vec_iq2_s_f32_f32", {8}},
+    {"mul_mat_vec_iq2_xs_f32_f32", {8}},
+    {"mul_mat_vec_iq2_xxs_f32_f32", {8}},
+    {"mul_mat_vec_iq3_s_f32_f32", {8}},
+    {"mul_mat_vec_iq3_xxs_f32_f32", {8}},
+    {"mul_mat_vec_iq4_nl_f32_f32", {8}},
+    {"mul_mat_vec_iq4_xs_f32_f32", {8}},
+    {"mul_mat_vec_nvfp4_f32_f32", {8}},
+    {"mul_mat_vec_q2_k_f32_f32", {8}},
+    {"mul_mat_vec_q3_k_f32_f32", {8}},
+    {"mul_mat_vec_q6_k_f32_f32", {8}},
     // Following are pipelines only for discrete
     {"matmul_id_subgroup_q4_k_q8_1_m", {8, calc_specialization_constant_intel_warptile}},
     {"matmul_id_subgroup_q6_k_q8_1_m", {8, calc_specialization_constant_intel_warptile}},
