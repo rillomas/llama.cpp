@@ -4571,6 +4571,8 @@ static void ggml_vk_load_shaders(vk_device& device) {
     uint32_t rm_iq = 2 * rm_kq;
 
     const bool use_subgroups = device->subgroup_arithmetic && device->architecture != vk_device_architecture::AMD_GCN;
+    const bool prefer_subgroup_16 = (!device->subgroup_size_control && default_subgroup_size >= 16) ||
+                                    (device->subgroup_size_control && device->subgroup_max_size >= 16);
 
     const uint32_t subgroup_size = (device->vendor_id == VK_VENDOR_ID_INTEL && device->subgroup_size_control && device->subgroup_min_size <= 16 && device->subgroup_max_size >= 16) ? 16 : default_subgroup_size;
     const uint32_t subgroup_size16 = std::max(subgroup_size, 16u);
@@ -4597,17 +4599,16 @@ static void ggml_vk_load_shaders(vk_device& device) {
                     PipelineConfigParameter pipeline_param = {};
                     if (get_pipeline_config_parameter(&pipeline_param, mul_mat_vec_gpu_config, std::string(name)) && pipeline_param.subgroup_size) {
                         required_subgroup_size = pipeline_param.subgroup_size;
-                    } else if (required_subgroup_size == 0) {
-                        required_subgroup_size = mul_mat_vec_gpu_config.default_subgroup_size;
                     }
                 }
 
-                const bool pipeline_use_subgroups16 = use_subgroups && required_subgroup_size >= 16;
+                // We use subgroup 16 only when no override setting exists and prefers to 16, or override setting is set to 16
+                const bool pipeline_use_subgroups16 = use_subgroups && ((required_subgroup_size == 0 && prefer_subgroup_16) || (required_subgroup_size == 16));
                 const shader_reduction_mode pipeline_reduc16 = (pipeline_use_subgroups16 && w == DMMV_WG_SIZE_SUBGROUP) ? SHADER_REDUCTION_MODE_SUBGROUP :
                                                                (pipeline_use_subgroups16 && w == DMMV_WG_SIZE_LARGE) ? SHADER_REDUCTION_MODE_HYBRID :
-                                                                                                                         SHADER_REDUCTION_MODE_SHMEM;
+                                                               SHADER_REDUCTION_MODE_SHMEM;
 
-                ggml_vk_create_pipeline(device, pipeline, name, shader_lens[pipeline_reduc16], shader_data[pipeline_reduc16], "main", mul_mat_vec_num_bindings, sizeof(vk_mat_vec_push_constants), wg_denoms, std::vector<uint32_t>(specialization_constants), 1, true, pipeline_use_subgroups16, pipeline_use_subgroups16 ? required_subgroup_size : 0);
+                ggml_vk_create_pipeline(device, pipeline, name, shader_lens[pipeline_reduc16], shader_data[pipeline_reduc16], "main", mul_mat_vec_num_bindings, sizeof(vk_mat_vec_push_constants), wg_denoms, std::vector<uint32_t>(specialization_constants), 1, true, pipeline_use_subgroups16, pipeline_use_subgroups16 ? 16 : required_subgroup_size);
             };
 
             ggml_vk_create_pipeline(device, device->pipeline_dequant_mul_mat_vec_f32_f32[w][GGML_TYPE_F32 ][i], "mul_mat_vec_f32_f32_f32",  arr_dmmv_f32_f32_f32_len[reduc],  arr_dmmv_f32_f32_f32_data[reduc],  "main", mul_mat_vec_num_bindings, sizeof(vk_mat_vec_push_constants), {1, 1, 1}, {wg_size_subgroup, 1, i+1}, 1, false, use_subgroups, force_subgroup_size);
@@ -4695,17 +4696,16 @@ static void ggml_vk_load_shaders(vk_device& device) {
                 PipelineConfigParameter pipeline_param = {};
                 if (get_pipeline_config_parameter(&pipeline_param, mul_mat_vec_gpu_config, std::string(name)) && pipeline_param.subgroup_size) {
                     required_subgroup_size = pipeline_param.subgroup_size;
-                } else if (required_subgroup_size == 0) {
-                    required_subgroup_size = mul_mat_vec_gpu_config.default_subgroup_size;
                 }
             }
 
-            const bool pipeline_use_subgroups16 = use_subgroups && required_subgroup_size >= 16;
+            // We use subgroup 16 only when no override setting exists and prefers to 16, or override setting is set to 16
+            const bool pipeline_use_subgroups16 = use_subgroups && ((required_subgroup_size == 0 && prefer_subgroup_16) || (required_subgroup_size == 16));
             const shader_reduction_mode pipeline_reduc16 = (pipeline_use_subgroups16 && w == DMMV_WG_SIZE_SUBGROUP) ? SHADER_REDUCTION_MODE_SUBGROUP :
                                                            (pipeline_use_subgroups16 && w == DMMV_WG_SIZE_LARGE) ? SHADER_REDUCTION_MODE_HYBRID :
-                                                                                                                     SHADER_REDUCTION_MODE_SHMEM;
+                                                           SHADER_REDUCTION_MODE_SHMEM;
 
-            ggml_vk_create_pipeline(device, pipeline, name, shader_lens[pipeline_reduc16], shader_data[pipeline_reduc16], "main", mul_mat_vec_id_num_bindings, sizeof(vk_mat_vec_id_push_constants), wg_denoms, std::vector<uint32_t>(specialization_constants), 1, true, pipeline_use_subgroups16, pipeline_use_subgroups16 ? required_subgroup_size : 0);
+            ggml_vk_create_pipeline(device, pipeline, name, shader_lens[pipeline_reduc16], shader_data[pipeline_reduc16], "main", mul_mat_vec_id_num_bindings, sizeof(vk_mat_vec_id_push_constants), wg_denoms, std::vector<uint32_t>(specialization_constants), 1, true, pipeline_use_subgroups16, pipeline_use_subgroups16 ? 16 : required_subgroup_size);
         };
 
         ggml_vk_create_pipeline(device, device->pipeline_dequant_mul_mat_vec_id_f32[w][GGML_TYPE_F32 ], "mul_mat_vec_id_f32_f32",        arr_dmmv_id_f32_f32_f32_len[reduc],     arr_dmmv_id_f32_f32_f32_data[reduc],     "main", mul_mat_vec_id_num_bindings, sizeof(vk_mat_vec_id_push_constants), {1, 1, 1}, {wg_size_subgroup, 1}, 1, false, use_subgroups, force_subgroup_size);
