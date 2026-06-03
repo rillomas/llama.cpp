@@ -3995,12 +3995,6 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
             if (pipeline_param.calc_specialization_constants) {
                 target_specialization_constants = pipeline_param.calc_specialization_constants(pipeline_param, specialization_constants);
             }
-        } else if (gpu_config_found && !param_found) {
-            // Only GPU config was given. Just update the default subgroup size
-            // if not specified by default
-            if (required_subgroup_size == 0) {
-                required_subgroup_size = gpu_config.default_subgroup_size;
-            }
         }
 
         vk_pipeline *ptr = &base_pipeline;
