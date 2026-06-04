@@ -3601,6 +3601,9 @@ static void ggml_vk_load_shaders(vk_device& device) {
     const uint32_t mul_mat_subgroup_size_16 = std::max(mul_mat_subgroup_size, 16u);
     const uint32_t mul_mat_subgroup_size_32 = std::max(mul_mat_subgroup_size, 32u);
 
+    const bool prefer_subgroup_16 = (!device->subgroup_size_control && default_subgroup_size >= 16) ||
+                                    (device->subgroup_size_control && device->subgroup_max_size >= 16);
+
     // mulmat
     std::vector<uint32_t> l_warptile, m_warptile, s_warptile,
                           l_warptile_id, m_warptile_id, s_warptile_id,
@@ -4258,7 +4261,7 @@ static void ggml_vk_load_shaders(vk_device& device) {
         }
 #endif
 
-        if (device->subgroup_ballot && device->subgroup_require_full_support) {
+        if (device->subgroup_ballot && device->subgroup_require_full_support && prefer_subgroup_16) {
             CREATE_MM(GGML_TYPE_F32, pipeline_matmul_id_f32, matmul_id_subgroup_f32_f32, , wg_denoms, warptile_id, vk_mat_mat_id_push_constants, mul_mat_id_param_count, _id, mul_mat_subgroup_size_16);
             CREATE_MM2(GGML_TYPE_F16, pipeline_matmul_id_f16, matmul_id_subgroup_f16, wg_denoms, warptile_id, vk_mat_mat_id_push_constants, mul_mat_id_param_count, _id, mul_mat_subgroup_size_16);
             CREATE_MM2(GGML_TYPE_F16, pipeline_matmul_id_f16_f32, matmul_id_subgroup_f16_f32, wg_denoms, warptile_id, vk_mat_mat_id_push_constants, mul_mat_id_param_count, _id, mul_mat_subgroup_size_16);
@@ -4425,7 +4428,7 @@ static void ggml_vk_load_shaders(vk_device& device) {
         }
 #endif
 
-        if (device->subgroup_ballot && device->subgroup_require_full_support) {
+        if (device->subgroup_ballot && device->subgroup_require_full_support && prefer_subgroup_16) {
             CREATE_MM(GGML_TYPE_F32, pipeline_matmul_id_f32, matmul_id_subgroup_f32_f32, , wg_denoms, warptile_id, vk_mat_mat_id_push_constants, mul_mat_id_param_count, _id, mul_mat_subgroup_size_16);
             CREATE_MM(GGML_TYPE_F16, pipeline_matmul_id_f16.f32acc, matmul_id_subgroup_f16, , wg_denoms, warptile_id, vk_mat_mat_id_push_constants, mul_mat_id_param_count, _id, mul_mat_subgroup_size_16);
             CREATE_MM(GGML_TYPE_F16, pipeline_matmul_id_f16_f32.f32acc, matmul_id_subgroup_f16_f32, , wg_denoms, warptile_id, vk_mat_mat_id_push_constants, mul_mat_id_param_count, _id, mul_mat_subgroup_size_16);
@@ -4526,8 +4529,6 @@ static void ggml_vk_load_shaders(vk_device& device) {
     uint32_t rm_iq = 2 * rm_kq;
 
     const bool use_subgroups = device->subgroup_arithmetic && device->architecture != vk_device_architecture::AMD_GCN;
-    const bool prefer_subgroup_16 = (!device->subgroup_size_control && default_subgroup_size >= 16) ||
-                                    (device->subgroup_size_control && device->subgroup_max_size >= 16);
 
     const uint32_t subgroup_size = (device->vendor_id == VK_VENDOR_ID_INTEL && device->subgroup_size_control && device->subgroup_min_size <= 16 && device->subgroup_max_size >= 16) ? 16 : default_subgroup_size;
     const uint32_t subgroup_size16 = std::max(subgroup_size, 16u);
