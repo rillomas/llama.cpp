@@ -3373,6 +3373,7 @@ static std::vector<uint32_t> calc_specialization_constant_intel_warptile(const P
     //const uint32_t WN = current[5];
     //GGML_ASSERT(WM != 0 && WN != 0 && BM % WM == 0 && BN % WN == 0);
     //output[0]  = (BM / WM) * (BN / WN) * config.subgroup_size;
+    output[4]  = config.subgroup_size;
     output[10] = config.subgroup_size;
     return output;
 }
