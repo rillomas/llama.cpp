@@ -1320,6 +1320,8 @@ static void init_fastdiv_values(uint32_t d, uint32_t &mp, uint32_t &L)
 }
 
 static uint32_t pack_fastdiv_L(uint32_t L0, uint32_t L1, uint32_t L2) {
+    std::cout << L0 << ","<<L1<<","<<L2<<std::endl;
+    //return (L0 & 0xff) | ((L1 & 0xff) << 8) | ((L2 & 0xff) << 16);
     return L0 | (L1 << 8) | (L2 << 16);
 }
 
@@ -6462,7 +6464,7 @@ static void ggml_vk_instance_init() {
 #endif
     const bool debug_utils_ext = ggml_vk_instance_debug_utils_ext_available(instance_extensions) && getenv("GGML_VK_DEBUG_MARKERS") != nullptr;
     std::vector<const char*> layers;
-
+    VkBool32                  enable_debug_printf = VK_TRUE;
     if (layer_settings) {
         layers.push_back("VK_LAYER_KHRONOS_validation");
     }
@@ -6487,6 +6489,7 @@ static void ggml_vk_instance_init() {
             1,
             &enable_best_practice
         },
+        { "VK_LAYER_KHRONOS_validation", "printf_enable",           vk::LayerSettingTypeEXT::eBool32, 1, &enable_debug_printf }
     };
     vk::LayerSettingsCreateInfoEXT layer_setting_info(settings);
     vk::InstanceCreateInfo instance_create_info(vk::InstanceCreateFlags{}, &app_info, layers, extensions, &layer_setting_info);

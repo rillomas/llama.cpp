@@ -1,5 +1,6 @@
 #extension GL_EXT_shader_16bit_storage : require
 #extension GL_EXT_control_flow_attributes : require
+#extension GL_EXT_debug_printf : enable
 
 layout (push_constant) uniform parameter
 {
@@ -41,7 +42,10 @@ uint fastdiv(uint n, uint mp, uint L) {
 }
 
 uint fastdiv_L(uint packed, uint slot) {
-    return (packed >> (slot * 8)) & 0xFFu;
+    uint val = (packed >> (slot * 8)) & 0xFFu;
+    //uint val = (packed >> (slot * 8)) & 0x3Fu;
+    debugPrintfEXT("0x%x, %u, %u\n", packed, val, slot);
+    return val;
 }
 
 uint src0_idx(uint idx) {
