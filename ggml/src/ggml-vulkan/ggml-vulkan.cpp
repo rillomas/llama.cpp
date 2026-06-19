@@ -3616,7 +3616,6 @@ static const std::unordered_map<std::string, PipelineConfigParameter> xe2_onward
     {"matmul_id_subgroup_q8_0_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
     {"matmul_id_subgroup_q8_0_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
     {"matmul_id_subgroup_iq2_xs_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_bf16_aligned_l", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
 };
 
 static bool is_intel(const vk_device_architecture& arch) {
