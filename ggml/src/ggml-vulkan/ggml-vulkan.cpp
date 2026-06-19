@@ -3611,8 +3611,15 @@ static std::vector<uint32_t> calc_specialization_constant_intel_xe2_onward_warpt
 }
 
 static const std::unordered_map<std::string, PipelineConfigParameter> xe2_onward_pipelines = {
-    {"matmul_id_subgroup_q4_k_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_f32_f32_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_id_subgroup_f16_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_id_subgroup_f16_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_id_subgroup_q4_0_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
     {"matmul_id_subgroup_q4_0_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_id_subgroup_q4_k_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_id_subgroup_q4_k_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_id_subgroup_q6_k_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_id_subgroup_q6_k_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
     {"matmul_id_subgroup_q8_0_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
     {"matmul_id_subgroup_q8_0_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
     {"matmul_id_subgroup_iq2_xs_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
@@ -3995,15 +4002,16 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
                 target_specialization_constants = pipeline_param.calc_specialization_constants(pipeline_param, specialization_constants);
             }
         } else if (gpu_config_found && !param_found) {
-            // Only GPU config was given. Only update the required subgroup size
-            // under certain conditions to avoid mismatch between device default subgroup size
-            // and overwritten default subgroup size.
+            // Only GPU config was given. Update the required subgroup size
+            // only under certain conditions to avoid mismatch between subgroup size expected by kernel
+            // and subgroup size selected by runtime.
             if (require_full_subgroups && required_subgroup_size == 0 &&
                 device->subgroup_size != gpu_config.default_subgroup_size) {
-                // Device default subgroup size is different with config default subgroup size.
+                // Device default subgroup size is different from user selected default subgroup size.
                 // This means the user has overwritten the subgroup size setting so we want to force the new default.
-                // We get mismatches on certain test cases without this since the device default subgroup size may mismatch with
-                // specialization constants given to kernel (which is based on overwritten subgroup default)
+                // We set the user selected default subgroupsize as required size to avoid
+                // mismatch between the kernel specialization constant (which is based on user selected subgroup size)
+                // and runtime selected subgroup size
                 required_subgroup_size = gpu_config.default_subgroup_size;
             }
         }
