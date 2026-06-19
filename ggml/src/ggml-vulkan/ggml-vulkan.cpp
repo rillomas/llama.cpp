@@ -3994,6 +3994,18 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
             if (pipeline_param.calc_specialization_constants) {
                 target_specialization_constants = pipeline_param.calc_specialization_constants(pipeline_param, specialization_constants);
             }
+        } else if (gpu_config_found && !param_found) {
+            // Only GPU config was given. Only update the required subgroup size
+            // under certain conditions to avoid mismatch between device default subgroup size
+            // and overwritten default subgroup size.
+            if (require_full_subgroups && required_subgroup_size == 0 &&
+                device->subgroup_size != gpu_config.default_subgroup_size) {
+                // Device default subgroup size is different with config default subgroup size.
+                // This means the user has overwritten the subgroup size setting so we want to force the new default.
+                // We get mismatches on certain test cases without this since the device default subgroup size may mismatch with
+                // specialization constants given to kernel (which is based on overwritten subgroup default)
+                required_subgroup_size = gpu_config.default_subgroup_size;
+            }
         }
 
         vk_pipeline *ptr = &base_pipeline;
