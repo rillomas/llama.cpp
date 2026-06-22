@@ -3563,8 +3563,7 @@ struct PipelineConfigParameter {
     // If empty we use the default.
     // Some kernels must calculate specialization constants
     // based on subgroup size so we have an interface to override the default here.
-    std::function<std::vector<uint32_t>(const PipelineConfigParameter &, const std::vector<uint32_t> &)>
-        calc_specialization_constants;
+    std::vector<uint32_t> (*calc_specialization_constants)(const PipelineConfigParameter &, const std::vector<uint32_t> &) = nullptr;
 };
 
 // Pipeline configuration for a target GPU.
@@ -3588,7 +3587,7 @@ struct GpuPipelineConfig {
     uint32_t default_subgroup_size = 0;
 
     // Backend-specific policy for updating subgroup/specialization outputs.
-    std::function<void(
+    void (*update_subgroup_params)(
         bool pipeline_param_found,
         const PipelineConfigParameter & pipeline_param,
         const std::vector<uint32_t> & specialization_constants,
@@ -3597,7 +3596,7 @@ struct GpuPipelineConfig {
         uint32_t default_subgroup_size,
         const vk_device & device,
         uint32_t & final_required_subgroup_size,
-        std::vector<uint32_t> & final_specialization_constant)> update_subgroup_params;
+        std::vector<uint32_t> & final_specialization_constant) = nullptr;
 };
 
 // Pipeline configuration for RDNA1 GPUs.
