@@ -3558,7 +3558,7 @@ static bool ggml_vk_matmul_int_shmem_support(const vk_device& device, const std:
 
 // A specific pipeline's configuration
 struct PipelineConfigParameter {
-    uint32_t subgroup_size;
+    uint32_t subgroup_size = 0;
     // Calculate specialization constants used for a specific pipeline.
     // If empty we use the default.
     // Some kernels must calculate specialization constants
@@ -3586,6 +3586,18 @@ struct GpuPipelineConfig {
     // Default subgroup size for this GPU.
     // Defaults to 0 if not explicitly provided.
     uint32_t default_subgroup_size = 0;
+
+    // Backend-specific policy for updating subgroup/specialization outputs.
+    std::function<void(
+        bool pipeline_param_found,
+        const PipelineConfigParameter & pipeline_param,
+        const std::vector<uint32_t> & specialization_constants,
+        bool require_full_subgroups,
+        uint32_t required_subgroup_size,
+        uint32_t default_subgroup_size,
+        const vk_device & device,
+        uint32_t & final_required_subgroup_size,
+        std::vector<uint32_t> & final_specialization_constant)> update_subgroup_params;
 };
 
 // Pipeline configuration for RDNA1 GPUs.
@@ -3657,6 +3669,63 @@ static bool is_intel(const vk_device_architecture& arch) {
         arch == vk_device_architecture::INTEL_XE2_ONWARD;
 }
 
+static void update_subgroup_params_intel(
+    bool pipeline_param_found,
+    const PipelineConfigParameter & pipeline_param,
+    const std::vector<uint32_t> & specialization_constants,
+    bool require_full_subgroups,
+    uint32_t required_subgroup_size,
+    uint32_t default_subgroup_size,
+    const vk_device & device,
+    uint32_t & final_required_subgroup_size,
+    std::vector<uint32_t> & final_specialization_constant) {
+    if (pipeline_param_found) {
+        // We have a GPU configuration and a specific parameter for this pipeline.
+        // We overwrite all valid parameters assuming the setting creator knows what they are doing.
+        if (pipeline_param.subgroup_size) {
+            final_required_subgroup_size = pipeline_param.subgroup_size;
+        }
+        if (pipeline_param.calc_specialization_constants) {
+            final_specialization_constant = pipeline_param.calc_specialization_constants(pipeline_param, specialization_constants);
+        }
+    }
+    else {
+        // Only GPU config was given. Update the required subgroup size
+        // only under certain conditions to avoid mismatch between subgroup size expected by kernel
+        // and subgroup size selected by runtime.
+        if (require_full_subgroups && required_subgroup_size == 0 &&
+            device->subgroup_size != default_subgroup_size) {
+            // Device default subgroup size is different from user selected default subgroup size.
+            // This means the user has overwritten the subgroup size setting so we want to force the new default.
+            // We set the user selected default subgroupsize as required size to avoid
+            // mismatch between the kernel specialization constant (which is based on user selected subgroup size)
+            // and runtime selected subgroup size
+            final_required_subgroup_size = default_subgroup_size;
+        }
+    }
+}
+
+static void update_subgroup_params_amd(
+    bool pipeline_param_found,
+    const PipelineConfigParameter & pipeline_param,
+    const std::vector<uint32_t> & specialization_constants,
+    bool require_full_subgroups,
+    uint32_t required_subgroup_size,
+    uint32_t default_subgroup_size,
+    const vk_device & device,
+    uint32_t & final_required_subgroup_size,
+    std::vector<uint32_t> & final_specialization_constant) {
+    GGML_UNUSED(default_subgroup_size);
+    GGML_UNUSED(device);
+    GGML_UNUSED(specialization_constants);
+    GGML_UNUSED(final_specialization_constant);
+
+    if (!require_full_subgroups && required_subgroup_size == 0 &&
+        pipeline_param_found && pipeline_param.subgroup_size) {
+        final_required_subgroup_size = pipeline_param.subgroup_size;
+    }
+}
+
 // Intel GPU can use subgroup 8, 16, or 32 depending on architeture.
 // Pre-Xe2 is 8, 16, or 32. Xe2 onward is 16 or 32. 32 is the default if nothing is specified.
 static constexpr uint32_t INTEL_DEFAULT_SUBGROUP_SIZE = 32;
@@ -3669,7 +3738,8 @@ static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {
         {
             rdna1_pipelines,
         },
-        RDNA_DEFAULT_SUBGROUP_SIZE
+        RDNA_DEFAULT_SUBGROUP_SIZE,
+        update_subgroup_params_amd
     },
     {
         vk_device_architecture::AMD_RDNA2,
@@ -3677,14 +3747,16 @@ static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {
         {
             rdna2_pipelines,
         },
-        RDNA_DEFAULT_SUBGROUP_SIZE
+        RDNA_DEFAULT_SUBGROUP_SIZE,
+        update_subgroup_params_amd
     },
     {
         vk_device_architecture::INTEL_PRE_XE2,
         {},
         {
         },
-        INTEL_DEFAULT_SUBGROUP_SIZE
+        INTEL_DEFAULT_SUBGROUP_SIZE,
+        update_subgroup_params_intel
     },
     {
         vk_device_architecture::INTEL_XE2_ONWARD,
@@ -3692,7 +3764,8 @@ static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {
         {
             xe2_onward_integrated_pipelines,
         },
-        INTEL_DEFAULT_SUBGROUP_SIZE
+        INTEL_DEFAULT_SUBGROUP_SIZE,
+        update_subgroup_params_intel
     },
     {
         vk_device_architecture::INTEL_XE2_ONWARD,
@@ -3700,15 +3773,13 @@ static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {
         {
             xe2_onward_discrete_pipelines,
         },
-        INTEL_DEFAULT_SUBGROUP_SIZE
+        INTEL_DEFAULT_SUBGROUP_SIZE,
+        update_subgroup_params_intel
     }
 
 };
 
 static bool get_gpu_pipeline_config(GpuPipelineConfig* output, const vk_device_architecture& arch, bool is_integrated) {
-    if (getenv("GGML_VK_DISABLE_PIPELINE_CONFIG_OVERRIDE")) {
-        return false;
-    }
     const char* GGML_VK_INTEL_DEFAULT_SUBGROUP_SIZE = getenv("GGML_VK_INTEL_DEFAULT_SUBGROUP_SIZE");
     uint32_t intel_default_subgroup_size = 0;
     if (GGML_VK_INTEL_DEFAULT_SUBGROUP_SIZE != nullptr) {
@@ -4029,35 +4100,27 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
         // Override subgroup size and specialization constant based on pipeline name
         GpuPipelineConfig gpu_config = {};
         PipelineConfigParameter pipeline_param = {};
-        bool param_found = false;
+        bool pipeline_param_found = false;
         auto gpu_config_found = get_gpu_pipeline_config(&gpu_config, device->architecture, device->properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu);
         if (gpu_config_found) {
-            param_found = get_pipeline_config_parameter(&pipeline_param, gpu_config, std::string(name));
+            pipeline_param_found = get_pipeline_config_parameter(&pipeline_param, gpu_config, std::string(name));
         }
 
-        std::vector<uint32_t> target_specialization_constants = specialization_constants;
-        if (gpu_config_found && param_found) {
-            // We have a GPU configuration and a specific parameter for this pipeline.
-            // We overwrite all valid parameters assuming the setting creator knows what they are doing.
-            if (pipeline_param.subgroup_size) {
-                required_subgroup_size = pipeline_param.subgroup_size;
-            }
-            if (pipeline_param.calc_specialization_constants) {
-                target_specialization_constants = pipeline_param.calc_specialization_constants(pipeline_param, specialization_constants);
-            }
-        } else if (gpu_config_found && !param_found) {
-            // Only GPU config was given. Update the required subgroup size
-            // only under certain conditions to avoid mismatch between subgroup size expected by kernel
-            // and subgroup size selected by runtime.
-            if (require_full_subgroups && required_subgroup_size == 0 &&
-                device->subgroup_size != gpu_config.default_subgroup_size) {
-                // Device default subgroup size is different from user selected default subgroup size.
-                // This means the user has overwritten the subgroup size setting so we want to force the new default.
-                // We set the user selected default subgroupsize as required size to avoid
-                // mismatch between the kernel specialization constant (which is based on user selected subgroup size)
-                // and runtime selected subgroup size
-                required_subgroup_size = gpu_config.default_subgroup_size;
-            }
+        // If we have a config for this GPU we update the specialization constant and required subgroup size
+        // based on custom logic for each GPU
+        std::vector<uint32_t> final_specialization_constant = specialization_constants;
+        uint32_t final_required_subgroup_size = required_subgroup_size;
+        if (gpu_config_found && gpu_config.update_subgroup_params) {
+            gpu_config.update_subgroup_params(
+                pipeline_param_found,
+                pipeline_param,
+                specialization_constants,
+                require_full_subgroups,
+                required_subgroup_size,
+                gpu_config.default_subgroup_size,
+                device,
+                final_required_subgroup_size,
+                final_specialization_constant);
         }
 
         vk_pipeline *ptr = &base_pipeline;
@@ -4106,10 +4169,10 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
                 claimed_task.entrypoint = entrypoint;
                 claimed_task.parameter_count = parameter_count;
                 claimed_task.wg_denoms = wg_denoms;
-                claimed_task.specialization_constants = target_specialization_constants;
+                claimed_task.specialization_constants = final_specialization_constant;
                 claimed_task.disable_robustness = disable_robustness;
                 claimed_task.require_full_subgroups = require_full_subgroups;
-                claimed_task.required_subgroup_size = required_subgroup_size;
+                claimed_task.required_subgroup_size = final_required_subgroup_size;
                 has_claimed_task = true;
             }
         }
