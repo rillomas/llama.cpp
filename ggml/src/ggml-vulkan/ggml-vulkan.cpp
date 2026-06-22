@@ -67,6 +67,7 @@ typedef struct VkPhysicalDeviceCooperativeMatrixDecodeVectorFeaturesNV {
 #include <future>
 #include <condition_variable>
 #include <thread>
+#include <optional>
 
 #if defined(_MSC_VER)
 # define NOMINMAX 1
@@ -3573,6 +3574,11 @@ struct GpuPipelineConfig {
     // Example: vk_device_architecture::AMD_GCN
     vk_device_architecture arch;
 
+    // True applies config to integrated GPU only.
+    // False applies to discrete GPU only.
+    // Empty means don't care (apply to both)
+    std::optional<bool> for_integrated;
+
     // Mapping of pipeline names to their specific configuration parameters.
     // Example: {"soft_max_f32", {64}}
     std::unordered_map<std::string, PipelineConfigParameter> pipelines;
@@ -3610,20 +3616,41 @@ static std::vector<uint32_t> calc_specialization_constant_intel_xe2_onward_warpt
     return output;
 }
 
-static const std::unordered_map<std::string, PipelineConfigParameter> xe2_onward_pipelines = {
+// Xe2+ dGPU targeted pipelines
+static const std::unordered_map<std::string, PipelineConfigParameter> xe2_onward_discrete_pipelines = {
+    {"matmul_bf16_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
     {"matmul_f32_f32_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_id_subgroup_f32_f32_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
     {"matmul_id_subgroup_f16_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
     {"matmul_id_subgroup_f16_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_q4_0_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
     {"matmul_id_subgroup_q4_0_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
     {"matmul_id_subgroup_q4_k_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
     {"matmul_id_subgroup_q4_k_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
     {"matmul_id_subgroup_q6_k_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_id_subgroup_q8_0_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_id_subgroup_q8_0_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_id_subgroup_iq2_xs_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    // Following are discrete only
+    {"matmul_id_subgroup_q4_0_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
     {"matmul_id_subgroup_q6_k_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+};
+
+// Xe2+ iGPU targeted pipelines
+static const std::unordered_map<std::string, PipelineConfigParameter> xe2_onward_integrated_pipelines = {
+    {"matmul_bf16_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_f32_f32_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_id_subgroup_f32_f32_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_id_subgroup_f16_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_id_subgroup_f16_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_id_subgroup_q4_0_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_id_subgroup_q4_k_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_id_subgroup_q4_k_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"matmul_id_subgroup_q6_k_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
     {"matmul_id_subgroup_q8_0_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
     {"matmul_id_subgroup_q8_0_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
     {"matmul_id_subgroup_iq2_xs_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
 };
+
 
 static bool is_intel(const vk_device_architecture& arch) {
     return arch == vk_device_architecture::INTEL_PRE_XE2 ||
@@ -3638,6 +3665,7 @@ static constexpr uint32_t INTEL_DEFAULT_SUBGROUP_SIZE = 32;
 static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {
     {
         vk_device_architecture::AMD_RDNA1,
+        {},
         {
             rdna1_pipelines,
         },
@@ -3645,6 +3673,7 @@ static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {
     },
     {
         vk_device_architecture::AMD_RDNA2,
+        {},
         {
             rdna2_pipelines,
         },
@@ -3652,20 +3681,31 @@ static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {
     },
     {
         vk_device_architecture::INTEL_PRE_XE2,
+        {},
         {
         },
         INTEL_DEFAULT_SUBGROUP_SIZE
     },
     {
         vk_device_architecture::INTEL_XE2_ONWARD,
+        true,
         {
-            xe2_onward_pipelines,
+            xe2_onward_integrated_pipelines,
+        },
+        INTEL_DEFAULT_SUBGROUP_SIZE
+    },
+    {
+        vk_device_architecture::INTEL_XE2_ONWARD,
+        false,
+        {
+            xe2_onward_discrete_pipelines,
         },
         INTEL_DEFAULT_SUBGROUP_SIZE
     }
+
 };
 
-static bool get_gpu_pipeline_config(GpuPipelineConfig* output, const vk_device_architecture& arch) {
+static bool get_gpu_pipeline_config(GpuPipelineConfig* output, const vk_device_architecture& arch, bool is_integrated) {
     if (getenv("GGML_VK_DISABLE_PIPELINE_CONFIG_OVERRIDE")) {
         return false;
     }
@@ -3677,6 +3717,10 @@ static bool get_gpu_pipeline_config(GpuPipelineConfig* output, const vk_device_a
 
     for (const auto & config : gpu_pipeline_configs) {
         if (config.arch == arch) {
+            if (config.for_integrated.has_value() && config.for_integrated.value() != is_integrated) {
+                // If for_integrated flag exists the iGPU/dGPU format must also match
+                continue;
+            }
             *output = config;
             if (is_intel(arch) && intel_default_subgroup_size) {
                 // force specified subgroup size when given
@@ -3711,7 +3755,7 @@ static uint32_t get_subgroup_size(const vk_device& device) {
     // Use the GPU default subgroup size if we have a matching configuration.
     // If not we use the device given default.
     GpuPipelineConfig gpu_config = {};
-    auto have_config = get_gpu_pipeline_config(&gpu_config, device->architecture);
+    auto have_config = get_gpu_pipeline_config(&gpu_config, device->architecture, device->properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu);
     if (have_config) {
         return gpu_config.default_subgroup_size;
     }
@@ -3986,7 +4030,7 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
         GpuPipelineConfig gpu_config = {};
         PipelineConfigParameter pipeline_param = {};
         bool param_found = false;
-        auto gpu_config_found = get_gpu_pipeline_config(&gpu_config, device->architecture);
+        auto gpu_config_found = get_gpu_pipeline_config(&gpu_config, device->architecture, device->properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu);
         if (gpu_config_found) {
             param_found = get_pipeline_config_parameter(&pipeline_param, gpu_config, std::string(name));
         }
@@ -6654,13 +6698,13 @@ static void ggml_vk_print_gpu_info(size_t idx) {
 #endif
 
     uint32_t default_subgroup_size = 0;
+    const bool uma = props2.properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu;
     GpuPipelineConfig gpu_config = {};
-    auto config_found = get_gpu_pipeline_config(&gpu_config, device_architecture);
+    auto config_found = get_gpu_pipeline_config(&gpu_config, device_architecture, uma);
     if (config_found) {
         default_subgroup_size = gpu_config.default_subgroup_size;
     }
     const size_t subgroup_size = (default_subgroup_size != 0) ? default_subgroup_size : subgroup_props.subgroupSize;
-    const bool uma = props2.properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu;
 
     integer_dot_product = integer_dot_product
                        && shader_integer_dot_product_props.integerDotProduct4x8BitPackedSignedAccelerated
