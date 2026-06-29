@@ -3677,7 +3677,7 @@ static constexpr uint32_t RDNA_DEFAULT_SUBGROUP_SIZE = 32;
 
 
 static std::vector<uint32_t> calc_specialization_constant_intel_xe2_onward_warptile(const PipelineConfigParameter& config, const std::vector<uint32_t>& current) {
-    GGML_ASSERT(current.size() == 11); // assuming *_warptile constants
+    GGML_ASSERT(current.size() == 12); // assuming *_warptile constants
     std::vector<uint32_t> output = current;
     // replacing subgroup_size_8 with current subgroup size
     output[4] = config.subgroup_size;
