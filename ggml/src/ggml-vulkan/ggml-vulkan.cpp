@@ -3687,37 +3687,14 @@ static std::vector<uint32_t> calc_specialization_constant_intel_xe2_onward_warpt
 
 // Xe2+ dGPU targeted pipelines
 static const std::unordered_map<std::string, PipelineConfigParameter> xe2_onward_discrete_pipelines = {
-    {"matmul_bf16_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_f32_f32_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_f32_f32_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_f16_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_f16_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_q4_0_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_q4_k_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_q4_k_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_q6_k_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_q8_0_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_q8_0_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_iq2_xs_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    // Following are discrete only
-    {"matmul_id_subgroup_q4_0_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_q6_k_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
 };
 
 // Xe2+ iGPU targeted pipelines
 static const std::unordered_map<std::string, PipelineConfigParameter> xe2_onward_integrated_pipelines = {
-    {"matmul_bf16_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_f32_f32_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_f32_f32_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_f16_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_f16_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_q4_0_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_q4_k_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_q4_k_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_q6_k_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_q8_0_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_q8_0_f32_f16acc_aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"matmul_id_subgroup_iq2_xs_f32_f16acc_aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+    {"aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
 };
 
 
