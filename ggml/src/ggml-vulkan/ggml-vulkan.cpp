@@ -394,7 +394,7 @@ static vk_device_architecture get_device_architecture(const vk::PhysicalDevice& 
             // Minimum subgroup size matches the SIMD width so we distinguish architecture by checking this value.
             // https://www.intel.com/content/www/us/en/content-details/824434/2024-intel-tech-tour-xe2-and-lunar-lake-s-gpu.html
             // https://www.intel.com/content/www/us/en/docs/oneapi/optimization-guide-gpu/2025-0/intel-xe-gpu-architecture.html
-            return vk_device_architecture::INTEL_XE2;
+            return vk_device_architecture::INTEL_XE2_ONWARD;
         } else if (subgroup_size_control_props.minSubgroupSize == 8 &&
                  integer_dot_product && integer_dot_props.integerDotProduct4x8BitPackedSignedAccelerated) {
             return vk_device_architecture::INTEL_XE1;
@@ -3722,7 +3722,7 @@ static const std::unordered_map<std::string, PipelineConfigParameter> xe2_onward
 
 
 static bool is_intel(const vk_device_architecture& arch) {
-    return arch == vk_device_architecture::INTEL_PRE_XE2 ||
+    return arch == vk_device_architecture::INTEL_XE1 ||
         arch == vk_device_architecture::INTEL_XE2_ONWARD;
 }
 
@@ -3808,7 +3808,7 @@ static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {
         update_subgroup_params_amd
     },
     {
-        vk_device_architecture::INTEL_PRE_XE2,
+        vk_device_architecture::INTEL_XE1,
         {},
         {
         },
