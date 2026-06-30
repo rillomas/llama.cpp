@@ -67,7 +67,6 @@ typedef struct VkPhysicalDeviceCooperativeMatrixDecodeVectorFeaturesNV {
 #include <future>
 #include <condition_variable>
 #include <thread>
-#include <optional>
 
 #if defined(_MSC_VER)
 # define NOMINMAX 1
@@ -3631,11 +3630,6 @@ struct GpuPipelineConfig {
     // Example: vk_device_architecture::AMD_GCN
     vk_device_architecture arch;
 
-    // True applies config to integrated GPU only.
-    // False applies to discrete GPU only.
-    // Empty means don't care (apply to both)
-    std::optional<bool> for_integrated;
-
     // Mapping of pipeline names to their specific configuration parameters.
     // Example: {"soft_max_f32", {64}}
     std::unordered_map<std::string, PipelineConfigParameter> pipelines;
@@ -3685,18 +3679,11 @@ static std::vector<uint32_t> calc_specialization_constant_intel_xe2_onward_warpt
     return output;
 }
 
-// Xe2+ dGPU targeted pipelines
-static const std::unordered_map<std::string, PipelineConfigParameter> xe2_onward_discrete_pipelines = {
+// Xe2+ GPU targeted pipelines
+static const std::unordered_map<std::string, PipelineConfigParameter> xe2_onward_pipelines = {
     {"aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
     {"aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
 };
-
-// Xe2+ iGPU targeted pipelines
-static const std::unordered_map<std::string, PipelineConfigParameter> xe2_onward_integrated_pipelines = {
-    {"aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-};
-
 
 static bool is_intel(const vk_device_architecture& arch) {
     return arch == vk_device_architecture::INTEL_XE1 ||
@@ -3768,7 +3755,6 @@ static constexpr uint32_t INTEL_DEFAULT_SUBGROUP_SIZE = 32;
 static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {
     {
         vk_device_architecture::AMD_RDNA1,
-        {},
         {
             rdna1_pipelines,
         },
@@ -3777,7 +3763,6 @@ static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {
     },
     {
         vk_device_architecture::AMD_RDNA2,
-        {},
         {
             rdna2_pipelines,
         },
@@ -3786,7 +3771,6 @@ static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {
     },
     {
         vk_device_architecture::INTEL_XE1,
-        {},
         {
         },
         INTEL_DEFAULT_SUBGROUP_SIZE,
@@ -3794,26 +3778,15 @@ static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {
     },
     {
         vk_device_architecture::INTEL_XE2_ONWARD,
-        true,
         {
-            xe2_onward_integrated_pipelines,
+            xe2_onward_pipelines,
         },
         INTEL_DEFAULT_SUBGROUP_SIZE,
         update_subgroup_params_intel
     },
-    {
-        vk_device_architecture::INTEL_XE2_ONWARD,
-        false,
-        {
-            xe2_onward_discrete_pipelines,
-        },
-        INTEL_DEFAULT_SUBGROUP_SIZE,
-        update_subgroup_params_intel
-    }
-
 };
 
-static bool get_gpu_pipeline_config(GpuPipelineConfig* output, const vk_device_architecture& arch, bool is_integrated) {
+static bool get_gpu_pipeline_config(GpuPipelineConfig* output, const vk_device_architecture& arch) {
     const char* GGML_VK_INTEL_DEFAULT_SUBGROUP_SIZE = getenv("GGML_VK_INTEL_DEFAULT_SUBGROUP_SIZE");
     uint32_t intel_default_subgroup_size = 0;
     if (GGML_VK_INTEL_DEFAULT_SUBGROUP_SIZE != nullptr) {
@@ -3822,10 +3795,6 @@ static bool get_gpu_pipeline_config(GpuPipelineConfig* output, const vk_device_a
 
     for (const auto & config : gpu_pipeline_configs) {
         if (config.arch == arch) {
-            if (config.for_integrated.has_value() && config.for_integrated.value() != is_integrated) {
-                // If for_integrated flag exists the iGPU/dGPU format must also match
-                continue;
-            }
             *output = config;
             if (is_intel(arch) && intel_default_subgroup_size) {
                 // force specified subgroup size when given
@@ -3860,7 +3829,7 @@ static uint32_t get_subgroup_size(const vk_device& device) {
     // Use the GPU default subgroup size if we have a matching configuration.
     // If not we use the device given default.
     GpuPipelineConfig gpu_config = {};
-    auto have_config = get_gpu_pipeline_config(&gpu_config, device->architecture, device->properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu);
+    auto have_config = get_gpu_pipeline_config(&gpu_config, device->architecture);
     if (have_config) {
         return gpu_config.default_subgroup_size;
     }
@@ -4135,7 +4104,7 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
         GpuPipelineConfig gpu_config = {};
         PipelineConfigParameter pipeline_param = {};
         bool pipeline_param_found = false;
-        auto gpu_config_found = get_gpu_pipeline_config(&gpu_config, device->architecture, device->properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu);
+        auto gpu_config_found = get_gpu_pipeline_config(&gpu_config, device->architecture);
         if (gpu_config_found) {
             pipeline_param_found = get_pipeline_config_parameter(&pipeline_param, gpu_config, std::string(name));
         }
@@ -6864,13 +6833,13 @@ static void ggml_vk_print_gpu_info(size_t idx) {
 #endif
 
     uint32_t default_subgroup_size = 0;
-    const bool uma = props2.properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu;
     GpuPipelineConfig gpu_config = {};
-    auto config_found = get_gpu_pipeline_config(&gpu_config, device_architecture, uma);
+    auto config_found = get_gpu_pipeline_config(&gpu_config, device_architecture);
     if (config_found) {
         default_subgroup_size = gpu_config.default_subgroup_size;
     }
     const size_t subgroup_size = (default_subgroup_size != 0) ? default_subgroup_size : subgroup_props.subgroupSize;
+    const bool uma = props2.properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu;
 
     integer_dot_product = integer_dot_product
                        && shader_integer_dot_product_props.integerDotProduct4x8BitPackedSignedAccelerated
