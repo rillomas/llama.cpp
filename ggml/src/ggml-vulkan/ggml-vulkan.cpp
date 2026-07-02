@@ -912,8 +912,7 @@ struct vk_device_struct {
     vk_pipeline pipeline_rope_vision_f32, pipeline_rope_vision_f16;
     vk_pipeline pipeline_argsort_f32[num_argsort_pipelines];
     vk_pipeline pipeline_argsort_large_f32[num_argsort_pipelines];
-    vk_pipeline pipeline_topk_nary_f32[num_topk_pipelines];
-    vk_pipeline pipeline_topk_argsort_f32[num_topk_pipelines];
+    vk_pipeline pipeline_topk_f32[num_topk_pipelines];
     vk_pipeline pipeline_sum_rows_f32;
     vk_pipeline pipeline_fwht_f32[4];
     vk_pipeline pipeline_cumsum_f32;
@@ -5399,9 +5398,9 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
             if (device->subgroup_arithmetic && device->subgroup_require_full_support && device->subgroup_shuffle && device->subgroup_ballot &&
                 nary_shmem <= device->properties.limits.maxComputeSharedMemorySize &&
                 BLOCK_SIZE >= default_subgroup_size) { // The n-ary top-k shader needs at least one full subgroup per workgroup.
-                ggml_vk_create_pipeline2(device, device->pipeline_topk_nary_f32[i], "topk_f32_nary_"+std::to_string(i), topk_nary_search_f32_len, topk_nary_search_f32_data, "main", 2, sizeof(vk_op_topk_push_constants), {BLOCK_SIZE, 1, 1}, {BLOCK_SIZE, default_subgroup_size, subgroup_size_log2}, 1, true, true, default_subgroup_size);
+                ggml_vk_create_pipeline2(device, device->pipeline_topk_f32[i], "topk_f32_nary_search_"+std::to_string(i), topk_nary_search_f32_len, topk_nary_search_f32_data, "main", 2, sizeof(vk_op_topk_push_constants), {BLOCK_SIZE, 1, 1}, {BLOCK_SIZE, default_subgroup_size, subgroup_size_log2}, 1, true, true, default_subgroup_size);
             } else if (2 * sizeof(int) * BLOCK_SIZE <= device->properties.limits.maxComputeSharedMemorySize) {
-                ggml_vk_create_pipeline2(device, device->pipeline_topk_argsort_f32[i], "topk_f32_argsort_"+std::to_string(i), topk_argsort_f32_len, topk_argsort_f32_data, "main", 2, sizeof(vk_op_topk_push_constants), {BLOCK_SIZE, 1, 1}, {BLOCK_SIZE, NCOLS_PADDED_LOG2}, 1, true);
+                ggml_vk_create_pipeline2(device, device->pipeline_topk_f32[i], "topk_f32_argsort_"+std::to_string(i), topk_argsort_f32_len, topk_argsort_f32_data, "main", 2, sizeof(vk_op_topk_push_constants), {BLOCK_SIZE, 1, 1}, {BLOCK_SIZE, NCOLS_PADDED_LOG2}, 1, true);
             }
         }
     }
@@ -13053,34 +13052,6 @@ static void ggml_vk_argsort(ggml_backend_vk_context * ctx, vk_context& subctx, c
     }
 }
 
-static vk_pipeline ggml_vk_find_topk_pipeline(vk_pipeline* pipelines, uint32_t min_pipeline, uint32_t preferred_idx, uint32_t max_pipeline, uint32_t& selected_idx) {
-    selected_idx = std::min(preferred_idx, max_pipeline);
-    selected_idx = std::max(selected_idx, min_pipeline);
-
-    // Find sufficient pipeline larger than the current candidate
-    for (uint32_t i = selected_idx; i <= max_pipeline; ++i) {
-        if (pipelines[i]) {
-            selected_idx = i;
-            return pipelines[i];
-        }
-    }
-
-    if (selected_idx == min_pipeline) {
-        // We are at the lower end so no more to search
-        return nullptr;
-    }
-
-    // If no larger pipeline is available we look for a smaller version
-    for (uint32_t i = selected_idx - 1; i >= min_pipeline; --i) {
-        if (pipelines[i]) {
-            selected_idx = i;
-            return pipelines[i];
-        }
-    }
-
-    return nullptr;
-}
-
 static void ggml_vk_topk(ggml_backend_vk_context * ctx, vk_context& subctx, const ggml_tensor * src0, ggml_tensor * dst) {
     uint32_t ncols = src0->ne[0];
     uint32_t nrows = ggml_nrows(src0);
@@ -13128,13 +13099,13 @@ static void ggml_vk_topk(ggml_backend_vk_context * ctx, vk_context& subctx, cons
             }
         }
 
-        // Look for nary kernels first
-        vk_pipeline pipeline = ggml_vk_find_topk_pipeline(ctx->device->pipeline_topk_nary_f32, min_pipeline, pipeline_idx, max_pipeline, pipeline_idx);
-        if (!pipeline) {
-            // fallback to argsort when nary is not available
-            pipeline = ggml_vk_find_topk_pipeline(ctx->device->pipeline_topk_argsort_f32, min_pipeline, pipeline_idx, max_pipeline, pipeline_idx);
+        vk_pipeline pipeline = ctx->device->pipeline_topk_f32[pipeline_idx];
+        // If the device doesn't support a pipeline this large, use smaller
+        while (!pipeline) {
+            pipeline_idx--;
+            GGML_ASSERT(pipeline_idx >= min_pipeline);
+            pipeline = ctx->device->pipeline_topk_f32[pipeline_idx];
         }
-        GGML_ASSERT(pipeline);
 
         vk_op_topk_push_constants pc2 = pc;
         pc2.ncols_input = num_elements;
@@ -17606,8 +17577,7 @@ static bool ggml_backend_vk_device_supports_op(ggml_backend_dev_t dev, const ggm
                 // whole thing. Not clear if this is needed.
                 uint32_t min_pipeline = (uint32_t)log2f(float(op->ne[0])) + 1;
                 if (min_pipeline >= num_topk_pipelines ||
-                    (!device->pipeline_topk_nary_f32[min_pipeline] && !device->pipeline_topk_argsort_f32[min_pipeline])) {
-                    // pipeline not available for either topk kernels
+                    !device->pipeline_topk_f32[min_pipeline]) {
                     return false;
                 }
             }
