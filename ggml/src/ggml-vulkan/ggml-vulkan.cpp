@@ -3685,11 +3685,6 @@ static const std::unordered_map<std::string, PipelineConfigParameter> xe2_pipeli
     {"aligned_s", {16, calc_specialization_constant_intel_xe2_warptile}},
 };
 
-static bool is_intel(const vk_device_architecture& arch) {
-    return arch == vk_device_architecture::INTEL_XE1 ||
-        arch == vk_device_architecture::INTEL_XE2;
-}
-
 static void update_subgroup_params_intel(
     bool pipeline_param_found,
     const PipelineConfigParameter & pipeline_param,
