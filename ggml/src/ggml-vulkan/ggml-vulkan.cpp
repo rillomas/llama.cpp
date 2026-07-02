@@ -309,7 +309,7 @@ enum vk_device_architecture {
     AMD_RDNA2,
     AMD_RDNA3,
     INTEL_XE1,
-    INTEL_XE2_ONWARD,
+    INTEL_XE2,
     NVIDIA_PRE_TURING,
     NVIDIA_TURING,
 };
@@ -393,7 +393,7 @@ static vk_device_architecture get_device_architecture(const vk::PhysicalDevice& 
             // Minimum subgroup size matches the SIMD width so we distinguish architecture by checking this value.
             // https://www.intel.com/content/www/us/en/content-details/824434/2024-intel-tech-tour-xe2-and-lunar-lake-s-gpu.html
             // https://www.intel.com/content/www/us/en/docs/oneapi/optimization-guide-gpu/2025-0/intel-xe-gpu-architecture.html
-            return vk_device_architecture::INTEL_XE2_ONWARD;
+            return vk_device_architecture::INTEL_XE2;
         } else if (subgroup_size_control_props.minSubgroupSize == 8 &&
                  integer_dot_product && integer_dot_props.integerDotProduct4x8BitPackedSignedAccelerated) {
             return vk_device_architecture::INTEL_XE1;
@@ -3670,7 +3670,7 @@ static const std::unordered_map<std::string, PipelineConfigParameter> rdna2_pipe
 static constexpr uint32_t RDNA_DEFAULT_SUBGROUP_SIZE = 32;
 
 
-static std::vector<uint32_t> calc_specialization_constant_intel_xe2_onward_warptile(const PipelineConfigParameter& config, const std::vector<uint32_t>& current) {
+static std::vector<uint32_t> calc_specialization_constant_intel_xe2_warptile(const PipelineConfigParameter& config, const std::vector<uint32_t>& current) {
     GGML_ASSERT(current.size() == 12); // assuming *_warptile constants
     std::vector<uint32_t> output = current;
     // replacing subgroup_size_8 with current subgroup size
@@ -3680,14 +3680,14 @@ static std::vector<uint32_t> calc_specialization_constant_intel_xe2_onward_warpt
 }
 
 // Xe2+ GPU targeted pipelines
-static const std::unordered_map<std::string, PipelineConfigParameter> xe2_onward_pipelines = {
-    {"aligned_m", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
-    {"aligned_s", {16, calc_specialization_constant_intel_xe2_onward_warptile}},
+static const std::unordered_map<std::string, PipelineConfigParameter> xe2_pipelines = {
+    {"aligned_m", {16, calc_specialization_constant_intel_xe2_warptile}},
+    {"aligned_s", {16, calc_specialization_constant_intel_xe2_warptile}},
 };
 
 static bool is_intel(const vk_device_architecture& arch) {
     return arch == vk_device_architecture::INTEL_XE1 ||
-        arch == vk_device_architecture::INTEL_XE2_ONWARD;
+        arch == vk_device_architecture::INTEL_XE2;
 }
 
 static void update_subgroup_params_intel(
@@ -3777,9 +3777,9 @@ static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {
         update_subgroup_params_intel
     },
     {
-        vk_device_architecture::INTEL_XE2_ONWARD,
+        vk_device_architecture::INTEL_XE2,
         {
-            xe2_onward_pipelines,
+            xe2_pipelines,
         },
         INTEL_DEFAULT_SUBGROUP_SIZE,
         update_subgroup_params_intel
@@ -8987,7 +8987,7 @@ static bool ggml_vk_should_use_mmvq(const vk_device& device, uint32_t m, uint32_
             return true;
         }
     case VK_VENDOR_ID_INTEL:
-        if (device->architecture == vk_device_architecture::INTEL_XE2_ONWARD) {
+        if (device->architecture == vk_device_architecture::INTEL_XE2) {
             if (src0_type == GGML_TYPE_Q2_K || src0_type == GGML_TYPE_Q3_K || src0_type == GGML_TYPE_Q6_K) {
                 return true;
             }
@@ -10407,7 +10407,7 @@ static void ggml_vk_flash_attn(ggml_backend_vk_context * ctx, vk_context& subctx
     uint32_t split_k = 1;
 
     // Intel Alchemist prefers more workgroups
-    const uint32_t shader_core_count_multiplier = (ctx->device->vendor_id == VK_VENDOR_ID_INTEL && ctx->device->architecture != INTEL_XE2_ONWARD) ? 2 : 1;
+    const uint32_t shader_core_count_multiplier = (ctx->device->vendor_id == VK_VENDOR_ID_INTEL && ctx->device->architecture != INTEL_XE2) ? 2 : 1;
 
     // Use a placeholder core count if one isn't available. split_k is a big help for perf.
     const uint32_t shader_core_count = ctx->device->shader_core_count ? ctx->device->shader_core_count * shader_core_count_multiplier : 16;
@@ -18111,7 +18111,7 @@ static bool ggml_vk_khr_cooperative_matrix_support(const vk::PhysicalDevicePrope
     switch (props.vendorID) {
     case VK_VENDOR_ID_INTEL:
         // Only allowing Xe2/Xe3 GPU and integrated Xe GPUs at the moment since older hardware (ex. Arc A770) has performance regressions.
-        return (arch == vk_device_architecture::INTEL_XE2_ONWARD) ||
+        return (arch == vk_device_architecture::INTEL_XE2) ||
             (arch == vk_device_architecture::INTEL_XE1 && props.deviceType == vk::PhysicalDeviceType::eIntegratedGpu && driver_props.driverID == vk::DriverId::eIntelProprietaryWindows);
     case VK_VENDOR_ID_AMD:
         if (driver_props.driverID == vk::DriverId::eAmdProprietary || driver_props.driverID == vk::DriverId::eAmdOpenSource) {
