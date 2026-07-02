@@ -3645,8 +3645,6 @@ struct GpuPipelineConfig {
         const std::vector<uint32_t> & specialization_constants,
         bool require_full_subgroups,
         uint32_t required_subgroup_size,
-        uint32_t default_subgroup_size,
-        const vk_device & device,
         uint32_t & final_required_subgroup_size,
         std::vector<uint32_t> & final_specialization_constant) = nullptr;
 };
@@ -3691,10 +3689,9 @@ static void update_subgroup_params_intel(
     const std::vector<uint32_t> & specialization_constants,
     bool require_full_subgroups,
     uint32_t required_subgroup_size,
-    uint32_t default_subgroup_size,
-    const vk_device & device,
     uint32_t & final_required_subgroup_size,
     std::vector<uint32_t> & final_specialization_constant) {
+    GGML_UNUSED(require_full_subgroups);
     if (pipeline_param_found) {
         // We have a GPU configuration and a specific parameter for this pipeline.
         // We overwrite all valid parameters assuming the setting creator knows what they are doing.
@@ -3705,20 +3702,6 @@ static void update_subgroup_params_intel(
             final_specialization_constant = pipeline_param.calc_specialization_constants(pipeline_param, specialization_constants);
         }
     }
-    else {
-        // Only GPU config was given. Update the required subgroup size
-        // only under certain conditions to avoid mismatch between subgroup size expected by kernel
-        // and subgroup size selected by runtime.
-        if (require_full_subgroups && required_subgroup_size == 0 &&
-            device->subgroup_size != default_subgroup_size) {
-            // Device default subgroup size is different from user selected default subgroup size.
-            // This means the user has overwritten the subgroup size setting so we want to force the new default.
-            // We set the user selected default subgroupsize as required size to avoid
-            // mismatch between the kernel specialization constant (which is based on user selected subgroup size)
-            // and runtime selected subgroup size
-            final_required_subgroup_size = default_subgroup_size;
-        }
-    }
 }
 
 static void update_subgroup_params_amd(
@@ -3727,12 +3710,8 @@ static void update_subgroup_params_amd(
     const std::vector<uint32_t> & specialization_constants,
     bool require_full_subgroups,
     uint32_t required_subgroup_size,
-    uint32_t default_subgroup_size,
-    const vk_device & device,
     uint32_t & final_required_subgroup_size,
     std::vector<uint32_t> & final_specialization_constant) {
-    GGML_UNUSED(default_subgroup_size);
-    GGML_UNUSED(device);
     GGML_UNUSED(specialization_constants);
     GGML_UNUSED(final_specialization_constant);
 
@@ -3807,18 +3786,6 @@ static bool get_pipeline_config_parameter(PipelineConfigParameter* output, const
         }
     }
     return false;
-}
-
-// Get default subgroup size for given device
-static uint32_t get_subgroup_size(const vk_device& device) {
-    // Use the GPU default subgroup size if we have a matching configuration.
-    // If not we use the device given default.
-    GpuPipelineConfig gpu_config = {};
-    auto have_config = get_gpu_pipeline_config(&gpu_config, device->architecture);
-    if (have_config) {
-        return gpu_config.default_subgroup_size;
-    }
-    return device->subgroup_size;
 }
 
 // Whether scalar flash attention will use the MMQ path for the given k_type.
@@ -4102,8 +4069,6 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
                 specialization_constants,
                 require_full_subgroups,
                 required_subgroup_size,
-                gpu_config.default_subgroup_size,
-                device,
                 final_required_subgroup_size,
                 final_specialization_constant);
         }
