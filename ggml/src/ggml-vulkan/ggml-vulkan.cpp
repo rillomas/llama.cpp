@@ -3645,6 +3645,7 @@ struct GpuPipelineConfig {
         const std::vector<uint32_t> & specialization_constants,
         bool require_full_subgroups,
         uint32_t required_subgroup_size,
+        uint32_t default_subgroup_size,
         uint32_t & final_required_subgroup_size,
         std::vector<uint32_t> & final_specialization_constant) = nullptr;
 };
@@ -3689,9 +3690,11 @@ static void update_subgroup_params_intel(
     const std::vector<uint32_t> & specialization_constants,
     bool require_full_subgroups,
     uint32_t required_subgroup_size,
+    uint32_t default_subgroup_size,
     uint32_t & final_required_subgroup_size,
     std::vector<uint32_t> & final_specialization_constant) {
     GGML_UNUSED(require_full_subgroups);
+    GGML_UNUSED(default_subgroup_size);
     if (pipeline_param_found) {
         // We have a GPU configuration and a specific parameter for this pipeline.
         // We overwrite all valid parameters assuming the setting creator knows what they are doing.
@@ -3710,14 +3713,19 @@ static void update_subgroup_params_amd(
     const std::vector<uint32_t> & specialization_constants,
     bool require_full_subgroups,
     uint32_t required_subgroup_size,
+    uint32_t default_subgroup_size,
     uint32_t & final_required_subgroup_size,
     std::vector<uint32_t> & final_specialization_constant) {
     GGML_UNUSED(specialization_constants);
     GGML_UNUSED(final_specialization_constant);
 
-    if (!require_full_subgroups && required_subgroup_size == 0 &&
-        pipeline_param_found && pipeline_param.subgroup_size) {
-        final_required_subgroup_size = pipeline_param.subgroup_size;
+    if (!require_full_subgroups && required_subgroup_size == 0) {
+        if (pipeline_param_found) {
+            final_required_subgroup_size = pipeline_param.subgroup_size;
+        } else {
+            // If no pipeline setting exists we use the GPU config default
+            final_required_subgroup_size = default_subgroup_size;
+        }
     }
 }
 
@@ -4069,6 +4077,7 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
                 specialization_constants,
                 require_full_subgroups,
                 required_subgroup_size,
+                gpu_config.default_subgroup_size,
                 final_required_subgroup_size,
                 final_specialization_constant);
         }
