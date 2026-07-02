@@ -3787,19 +3787,9 @@ static std::vector<GpuPipelineConfig> gpu_pipeline_configs = {
 };
 
 static bool get_gpu_pipeline_config(GpuPipelineConfig* output, const vk_device_architecture& arch) {
-    const char* GGML_VK_INTEL_DEFAULT_SUBGROUP_SIZE = getenv("GGML_VK_INTEL_DEFAULT_SUBGROUP_SIZE");
-    uint32_t intel_default_subgroup_size = 0;
-    if (GGML_VK_INTEL_DEFAULT_SUBGROUP_SIZE != nullptr) {
-        intel_default_subgroup_size = std::stoul(GGML_VK_INTEL_DEFAULT_SUBGROUP_SIZE);
-    }
-
     for (const auto & config : gpu_pipeline_configs) {
         if (config.arch == arch) {
             *output = config;
-            if (is_intel(arch) && intel_default_subgroup_size) {
-                // force specified subgroup size when given
-                output->default_subgroup_size = intel_default_subgroup_size;
-            }
             return true;
         }
     }
