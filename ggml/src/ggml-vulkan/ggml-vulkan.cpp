@@ -67,7 +67,6 @@ typedef struct VkPhysicalDeviceCooperativeMatrixDecodeVectorFeaturesNV {
 #include <future>
 #include <condition_variable>
 #include <thread>
-#include <optional>
 
 #if defined(_MSC_VER)
 # define NOMINMAX 1
@@ -4319,7 +4318,7 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
     };
 
     GpuPipelineConfig matmul_id_gpu_config = {};
-    const bool matmul_id_gpu_config_found = get_gpu_pipeline_config(&matmul_id_gpu_config, device->architecture, device->properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu);
+    const bool matmul_id_gpu_config_found = get_gpu_pipeline_config(&matmul_id_gpu_config, device->architecture);
     const auto choose_mulmat_id_kernel = [&](const char * mulmat_id_kernel_name) {
         subgroup_kernel_choice choice {};
         if (!(device->subgroup_ballot && device->subgroup_require_full_support)) {
@@ -4333,7 +4332,7 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
             }
         }
 
-        choice.use_subgroup_16 = (choice.required_subgroup_size == 0 && prefer_subgroup_16) ||
+        choice.use_subgroup_16 = (choice.required_subgroup_size == 0 && subgroup_min_size_16) ||
                                  (choice.required_subgroup_size == 16);
         return choice;
     };
@@ -4620,11 +4619,19 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
 
 #define CREATE_MM_VARIANT_UNALIGNED(TYPE, PIPELINE_NAME, NAMELC, F16ACC, WG_DENOMS, WARPTILE, PUSHCONST, PARAMCOUNT, ID, REQSUBGROUPSIZE, SZ, SLOT) \
         if (device->mul_mat ## ID ## _ ## SZ [TYPE]) \
-            ggml_vk_create_pipeline(device, device-> PIPELINE_NAME -> SLOT, #NAMELC #F16ACC "_" #SZ, NAMELC ## F16ACC ## _len, NAMELC ## F16ACC ## _data, "main", PARAMCOUNT, sizeof(PUSHCONST), SZ ## _ ## WG_DENOMS, SZ ## _ ## WARPTILE, 1, false, REQSUBGROUPSIZE > 0, REQSUBGROUPSIZE);   \
+            ggml_vk_create_pipeline(device, device-> PIPELINE_NAME -> SLOT, #NAMELC #F16ACC "_" #SZ, (device->dot2_f16 ? NAMELC ## _dot2 ## F16ACC ## _len : NAMELC ## F16ACC ## _len), (device->dot2_f16 ? NAMELC ## _dot2 ## F16ACC ## _data : NAMELC ## F16ACC ## _data), "main", PARAMCOUNT, sizeof(PUSHCONST), SZ ## _ ## WG_DENOMS, ggml_vk_mul_mm_spec(SZ ## _ ## WARPTILE, false), 1, false, REQSUBGROUPSIZE > 0, REQSUBGROUPSIZE);   \
 
 #define CREATE_MM_VARIANT_ALIGNED(TYPE, PIPELINE_NAME, NAMELC, F16ACC, WG_DENOMS, WARPTILE, PUSHCONST, PARAMCOUNT, ID, REQSUBGROUPSIZE, SZ, SLOT, ALIGNV) \
         if (device->mul_mat ## ID ## _ ## SZ [TYPE]) \
-            ggml_vk_create_pipeline(device, device-> PIPELINE_NAME -> SLOT, #NAMELC #F16ACC "_aligned_" #SZ, NAMELC ## _aligned ## F16ACC ## _len, NAMELC ## _aligned ## F16ACC ## _data, "main", PARAMCOUNT, sizeof(PUSHCONST), SZ ## _ ## WG_DENOMS, SZ ## _ ## WARPTILE, ALIGNV, false, REQSUBGROUPSIZE > 0, REQSUBGROUPSIZE);   \
+            ggml_vk_create_pipeline(device, device-> PIPELINE_NAME -> SLOT, #NAMELC #F16ACC "_aligned_" #SZ, (device->dot2_f16 ? NAMELC ## _dot2 ## F16ACC ## _len : NAMELC ## F16ACC ## _len), (device->dot2_f16 ? NAMELC ## _dot2 ## F16ACC ## _data : NAMELC ## F16ACC ## _data), "main", PARAMCOUNT, sizeof(PUSHCONST), SZ ## _ ## WG_DENOMS, ggml_vk_mul_mm_spec(SZ ## _ ## WARPTILE, true), ALIGNV, false, REQSUBGROUPSIZE > 0, REQSUBGROUPSIZE);   \
+
+#define CREATE_MM_VARIANT_UNALIGNED_NODOT2(TYPE, PIPELINE_NAME, NAMELC, F16ACC, WG_DENOMS, WARPTILE, PUSHCONST, PARAMCOUNT, ID, REQSUBGROUPSIZE, SZ, SLOT) \
+        if (device->mul_mat ## ID ## _ ## SZ [TYPE]) \
+            ggml_vk_create_pipeline(device, device-> PIPELINE_NAME -> SLOT, #NAMELC #F16ACC "_" #SZ, NAMELC ## F16ACC ## _len, NAMELC ## F16ACC ## _data, "main", PARAMCOUNT, sizeof(PUSHCONST), SZ ## _ ## WG_DENOMS, ggml_vk_mul_mm_spec(SZ ## _ ## WARPTILE, false), 1, false, REQSUBGROUPSIZE > 0, REQSUBGROUPSIZE);   \
+
+#define CREATE_MM_VARIANT_ALIGNED_NODOT2(TYPE, PIPELINE_NAME, NAMELC, F16ACC, WG_DENOMS, WARPTILE, PUSHCONST, PARAMCOUNT, ID, REQSUBGROUPSIZE, SZ, SLOT, ALIGNV) \
+        if (device->mul_mat ## ID ## _ ## SZ [TYPE]) \
+            ggml_vk_create_pipeline(device, device-> PIPELINE_NAME -> SLOT, #NAMELC #F16ACC "_aligned_" #SZ, NAMELC ## F16ACC ## _len, NAMELC ## F16ACC ## _data, "main", PARAMCOUNT, sizeof(PUSHCONST), SZ ## _ ## WG_DENOMS, ggml_vk_mul_mm_spec(SZ ## _ ## WARPTILE, true), ALIGNV, false, REQSUBGROUPSIZE > 0, REQSUBGROUPSIZE);   \
 
         // Create 2 variants, {f16,f32} accumulator
 #define CREATE_MM2(TYPE, PIPELINE_NAME, NAMELC, WG_DENOMS, WARPTILE, PUSHCONST, PARAMCOUNT, ID, REQSUBGROUPSIZE) \
@@ -4705,6 +4712,28 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
         CREATE_MM_ID_AUTO(TYPE, PIPELINE_NAME . f16acc, SUBGROUP_NAMELC, BASE_NAMELC, _f16acc, WG_DENOMS, SUB_WARPTILE, BASE_WARPTILE, PUSHCONST, PARAMCOUNT, ID, SUB_REQSUBGROUPSIZE, BASE_REQSUBGROUPSIZE); \
         CREATE_MM_ID_AUTO(TYPE, PIPELINE_NAME . f32acc, SUBGROUP_NAMELC, BASE_NAMELC, , WG_DENOMS, SUB_WARPTILE, BASE_WARPTILE, PUSHCONST, PARAMCOUNT, ID, SUB_REQSUBGROUPSIZE, BASE_REQSUBGROUPSIZE)
 
+#define CREATE_MM_ID_AUTO_NODOT2(TYPE, PIPELINE_NAME, SUBGROUP_NAMELC, BASE_NAMELC, F16ACC, WG_DENOMS, SUB_WARPTILE, BASE_WARPTILE, PUSHCONST, PARAMCOUNT, ID, SUB_REQSUBGROUPSIZE, BASE_REQSUBGROUPSIZE) \
+        do { \
+            choose_mulmat_id_variant(std::string(#SUBGROUP_NAMELC #F16ACC "_l"), std::string(#BASE_NAMELC #F16ACC "_l"), SUB_REQSUBGROUPSIZE, BASE_REQSUBGROUPSIZE, \
+                [&](uint32_t req) { CREATE_MM_VARIANT_UNALIGNED_NODOT2(TYPE, PIPELINE_NAME, BASE_NAMELC, F16ACC, WG_DENOMS, BASE_WARPTILE, PUSHCONST, PARAMCOUNT, ID, req, l, l); }, \
+                [&](uint32_t req) { CREATE_MM_VARIANT_UNALIGNED_NODOT2(TYPE, PIPELINE_NAME, SUBGROUP_NAMELC, F16ACC, WG_DENOMS, SUB_WARPTILE, PUSHCONST, PARAMCOUNT, ID, req, l, l); }); \
+            choose_mulmat_id_variant(std::string(#SUBGROUP_NAMELC #F16ACC "_m"), std::string(#BASE_NAMELC #F16ACC "_m"), SUB_REQSUBGROUPSIZE, BASE_REQSUBGROUPSIZE, \
+                [&](uint32_t req) { CREATE_MM_VARIANT_UNALIGNED_NODOT2(TYPE, PIPELINE_NAME, BASE_NAMELC, F16ACC, WG_DENOMS, BASE_WARPTILE, PUSHCONST, PARAMCOUNT, ID, req, m, m); }, \
+                [&](uint32_t req) { CREATE_MM_VARIANT_UNALIGNED_NODOT2(TYPE, PIPELINE_NAME, SUBGROUP_NAMELC, F16ACC, WG_DENOMS, SUB_WARPTILE, PUSHCONST, PARAMCOUNT, ID, req, m, m); }); \
+            choose_mulmat_id_variant(std::string(#SUBGROUP_NAMELC #F16ACC "_s"), std::string(#BASE_NAMELC #F16ACC "_s"), SUB_REQSUBGROUPSIZE, BASE_REQSUBGROUPSIZE, \
+                [&](uint32_t req) { CREATE_MM_VARIANT_UNALIGNED_NODOT2(TYPE, PIPELINE_NAME, BASE_NAMELC, F16ACC, WG_DENOMS, BASE_WARPTILE, PUSHCONST, PARAMCOUNT, ID, req, s, s); }, \
+                [&](uint32_t req) { CREATE_MM_VARIANT_UNALIGNED_NODOT2(TYPE, PIPELINE_NAME, SUBGROUP_NAMELC, F16ACC, WG_DENOMS, SUB_WARPTILE, PUSHCONST, PARAMCOUNT, ID, req, s, s); }); \
+            choose_mulmat_id_variant(std::string(#SUBGROUP_NAMELC #F16ACC "_aligned_l"), std::string(#BASE_NAMELC #F16ACC "_aligned_l"), SUB_REQSUBGROUPSIZE, BASE_REQSUBGROUPSIZE, \
+                [&](uint32_t req) { CREATE_MM_VARIANT_ALIGNED_NODOT2(TYPE, PIPELINE_NAME, BASE_NAMELC, F16ACC, WG_DENOMS, BASE_WARPTILE, PUSHCONST, PARAMCOUNT, ID, req, l, a_l, l_align); }, \
+                [&](uint32_t req) { CREATE_MM_VARIANT_ALIGNED_NODOT2(TYPE, PIPELINE_NAME, SUBGROUP_NAMELC, F16ACC, WG_DENOMS, SUB_WARPTILE, PUSHCONST, PARAMCOUNT, ID, req, l, a_l, l_align); }); \
+            choose_mulmat_id_variant(std::string(#SUBGROUP_NAMELC #F16ACC "_aligned_m"), std::string(#BASE_NAMELC #F16ACC "_aligned_m"), SUB_REQSUBGROUPSIZE, BASE_REQSUBGROUPSIZE, \
+                [&](uint32_t req) { CREATE_MM_VARIANT_ALIGNED_NODOT2(TYPE, PIPELINE_NAME, BASE_NAMELC, F16ACC, WG_DENOMS, BASE_WARPTILE, PUSHCONST, PARAMCOUNT, ID, req, m, a_m, m_align); }, \
+                [&](uint32_t req) { CREATE_MM_VARIANT_ALIGNED_NODOT2(TYPE, PIPELINE_NAME, SUBGROUP_NAMELC, F16ACC, WG_DENOMS, SUB_WARPTILE, PUSHCONST, PARAMCOUNT, ID, req, m, a_m, m_align); }); \
+            choose_mulmat_id_variant(std::string(#SUBGROUP_NAMELC #F16ACC "_aligned_s"), std::string(#BASE_NAMELC #F16ACC "_aligned_s"), SUB_REQSUBGROUPSIZE, BASE_REQSUBGROUPSIZE, \
+                [&](uint32_t req) { CREATE_MM_VARIANT_ALIGNED_NODOT2(TYPE, PIPELINE_NAME, BASE_NAMELC, F16ACC, WG_DENOMS, BASE_WARPTILE, PUSHCONST, PARAMCOUNT, ID, req, s, a_s, s_align); }, \
+                [&](uint32_t req) { CREATE_MM_VARIANT_ALIGNED_NODOT2(TYPE, PIPELINE_NAME, SUBGROUP_NAMELC, F16ACC, WG_DENOMS, SUB_WARPTILE, PUSHCONST, PARAMCOUNT, ID, req, s, a_s, s_align); }); \
+        } while (false)
+
 #define CREATE_MMQ_ID_AUTO(TYPE, PIPELINE_NAME, SUBGROUP_NAMELC, BASE_NAMELC, WG_DENOMS, WARPTILE, PUSHCONST, PARAMCOUNT, ID, SUB_REQSUBGROUPSIZE, BASE_REQSUBGROUPSIZE) \
         do { \
             choose_mulmat_id_variant(std::string(#SUBGROUP_NAMELC "_l"), std::string(#BASE_NAMELC "_l"), SUB_REQSUBGROUPSIZE, BASE_REQSUBGROUPSIZE, \
@@ -4721,7 +4750,7 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
         CREATE_MM_ID_AUTO(GGML_TYPE_F32, pipeline_matmul_id_f32, matmul_id_subgroup_f32_f32, matmul_id_f32_f32, , wg_denoms, warptile_id, warptile, vk_mat_mat_id_push_constants, mul_mat_id_param_count, _id, mul_mat_subgroup_size_16, 0);
         CREATE_MM2_ID_AUTO(GGML_TYPE_F16, pipeline_matmul_id_f16, matmul_id_subgroup_f16, matmul_id_f16, wg_denoms, warptile_id, warptile, vk_mat_mat_id_push_constants, mul_mat_id_param_count, _id, mul_mat_subgroup_size_16, 0);
         CREATE_MM2_ID_AUTO(GGML_TYPE_F16, pipeline_matmul_id_f16_f32, matmul_id_subgroup_f16_f32, matmul_id_f16_f32, wg_denoms, warptile_id, warptile, vk_mat_mat_id_push_constants, mul_mat_id_param_count, _id, mul_mat_subgroup_size_16, 0);
-        CREATE_MM_ID_AUTO(GGML_TYPE_BF16, pipeline_matmul_id_bf16, matmul_id_subgroup_bf16, matmul_id_bf16, , wg_denoms, warptile_id, warptile, vk_mat_mat_id_push_constants, mul_mat_id_param_count, _id, mul_mat_subgroup_size_16, 0);
+        CREATE_MM_ID_AUTO_NODOT2(GGML_TYPE_BF16, pipeline_matmul_id_bf16, matmul_id_subgroup_bf16, matmul_id_bf16, , wg_denoms, warptile_id, warptile, vk_mat_mat_id_push_constants, mul_mat_id_param_count, _id, mul_mat_subgroup_size_16, 0);
 
         CREATE_MM2_ID_AUTO(GGML_TYPE_Q1_0, pipeline_dequant_mul_mat_mat_id[GGML_TYPE_Q1_0], matmul_id_subgroup_q1_0_f32, matmul_id_q1_0_f32, mmq_wg_denoms, warptile_mmqid, warptile_mmqid, vk_mat_mat_id_push_constants, mul_mat_id_param_count, _id, mul_mat_subgroup_size, 0);
         CREATE_MM2_ID_AUTO(GGML_TYPE_Q4_0, pipeline_dequant_mul_mat_mat_id[GGML_TYPE_Q4_0], matmul_id_subgroup_q4_0_f32, matmul_id_q4_0_f32, mmq_wg_denoms, warptile_mmqid, warptile_mmqid, vk_mat_mat_id_push_constants, mul_mat_id_param_count, _id, mul_mat_subgroup_size, 0);
@@ -4765,9 +4794,12 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
 #endif
 
 #undef CREATE_MMQ_ID_AUTO
+#undef CREATE_MM_ID_AUTO_NODOT2
 #undef CREATE_MM2_ID_AUTO
 #undef CREATE_MM_ID_AUTO
 #undef CREATE_MMQ_VARIANT
+#undef CREATE_MM_VARIANT_ALIGNED_NODOT2
+#undef CREATE_MM_VARIANT_UNALIGNED_NODOT2
 #undef CREATE_MM_VARIANT_ALIGNED
 #undef CREATE_MM_VARIANT_UNALIGNED
 #undef CREATE_MM2
@@ -4804,7 +4836,7 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
 
 #define CREATE_MM_VARIANT_ALIGNED_FP32(TYPE, PIPELINE_NAME, NAMELC, WG_DENOMS, WARPTILE, PUSHCONST, PARAMCOUNT, ID, REQSUBGROUPSIZE, SZ, SLOT, ALIGNV) \
         if (device->mul_mat ## ID ## _ ## SZ [TYPE]) \
-            ggml_vk_create_pipeline(device, device-> PIPELINE_NAME -> SLOT, #NAMELC "_aligned_" #SZ, NAMELC ## _aligned ## _fp32_len, NAMELC ## _aligned ## _fp32_data, "main", PARAMCOUNT, sizeof(PUSHCONST), SZ ## _ ## WG_DENOMS, SZ ## _ ## WARPTILE, ALIGNV, false, REQSUBGROUPSIZE > 0, REQSUBGROUPSIZE);   \
+            ggml_vk_create_pipeline(device, device-> PIPELINE_NAME -> SLOT, #NAMELC "_aligned_" #SZ, NAMELC ## _fp32_len, NAMELC ## _fp32_data, "main", PARAMCOUNT, sizeof(PUSHCONST), SZ ## _ ## WG_DENOMS, SZ ## _ ## WARPTILE, ALIGNV, false, REQSUBGROUPSIZE > 0, REQSUBGROUPSIZE);   \
 
         CREATE_MM(GGML_TYPE_F32, pipeline_matmul_f32, matmul_f32_f32, , wg_denoms, warptile, vk_mat_mat_push_constants, 3, , 0);
         CREATE_MM(GGML_TYPE_F32, pipeline_matmul_f32_f16, matmul_f32_f16, , wg_denoms, warptile, vk_mat_mat_push_constants, 3, , 0);
@@ -4960,7 +4992,7 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
     static constexpr uint32_t mul_mat_vec_num_bindings = 5;
     static constexpr uint32_t mul_mat_vec_id_num_bindings = 6;
     GpuPipelineConfig mul_mat_vec_gpu_config = {};
-    const bool mul_mat_vec_gpu_config_found = get_gpu_pipeline_config(&mul_mat_vec_gpu_config, device->architecture, device->properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu);
+    const bool mul_mat_vec_gpu_config_found = get_gpu_pipeline_config(&mul_mat_vec_gpu_config, device->architecture);
 
     for (uint32_t w = 0; w < DMMV_WG_SIZE_COUNT; ++w) {
         const uint32_t wg_size_subgroup   = (w == DMMV_WG_SIZE_SUBGROUP) ? subgroup_size : (subgroup_size * 4);
@@ -4982,7 +5014,7 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
                 }
 
                 // We use subgroup 16 only when no override setting exists and prefers to 16, or override setting is set to 16
-                const bool pipeline_use_subgroups16 = use_subgroups && ((required_subgroup_size == 0 && prefer_subgroup_16) || (required_subgroup_size == 16));
+                const bool pipeline_use_subgroups16 = use_subgroups && ((required_subgroup_size == 0 && subgroup_min_size_16) || (required_subgroup_size == 16));
                 const shader_reduction_mode pipeline_reduc16 = (pipeline_use_subgroups16 && w == DMMV_WG_SIZE_SUBGROUP) ? SHADER_REDUCTION_MODE_SUBGROUP :
                                                                (pipeline_use_subgroups16 && w == DMMV_WG_SIZE_LARGE) ? SHADER_REDUCTION_MODE_HYBRID :
                                                                SHADER_REDUCTION_MODE_SHMEM;
@@ -5079,7 +5111,7 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
             }
 
             // We use subgroup 16 only when no override setting exists and prefers to 16, or override setting is set to 16
-            const bool pipeline_use_subgroups16 = use_subgroups && ((required_subgroup_size == 0 && prefer_subgroup_16) || (required_subgroup_size == 16));
+            const bool pipeline_use_subgroups16 = use_subgroups && ((required_subgroup_size == 0 && subgroup_min_size_16) || (required_subgroup_size == 16));
             const shader_reduction_mode pipeline_reduc16 = (pipeline_use_subgroups16 && w == DMMV_WG_SIZE_SUBGROUP) ? SHADER_REDUCTION_MODE_SUBGROUP :
                                                            (pipeline_use_subgroups16 && w == DMMV_WG_SIZE_LARGE) ? SHADER_REDUCTION_MODE_HYBRID :
                                                            SHADER_REDUCTION_MODE_SHMEM;
@@ -6918,13 +6950,13 @@ static void ggml_vk_print_gpu_info(size_t idx) {
 #endif
 
     uint32_t default_subgroup_size = 0;
-    const bool uma = props2.properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu;
     GpuPipelineConfig gpu_config = {};
-    auto config_found = get_gpu_pipeline_config(&gpu_config, device_architecture, uma);
+    auto config_found = get_gpu_pipeline_config(&gpu_config, device_architecture);
     if (config_found) {
         default_subgroup_size = gpu_config.default_subgroup_size;
     }
     const size_t subgroup_size = (default_subgroup_size != 0) ? default_subgroup_size : subgroup_props.subgroupSize;
+    const bool uma = props2.properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu;
 
     integer_dot_product = integer_dot_product
                        && shader_integer_dot_product_props.integerDotProduct4x8BitPackedSignedAccelerated
