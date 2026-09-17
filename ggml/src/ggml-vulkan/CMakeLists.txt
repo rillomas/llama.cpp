@@ -142,6 +142,10 @@ if (Vulkan_FOUND)
         add_compile_definitions(GGML_VULKAN_VALIDATE)
     endif()
 
+    if (GGML_VULKAN_VALIDATE_GPU_ASSISTED)
+        add_compile_definitions(GGML_VULKAN_VALIDATE_GPU_ASSISTED)
+    endif()
+
     if (GGML_VULKAN_RUN_TESTS)
         add_compile_definitions(GGML_VULKAN_RUN_TESTS)
         # the test path also calls ggml_graph_compute_with_ctx() (ggml-cpu)

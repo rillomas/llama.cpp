@@ -7799,6 +7799,16 @@ static void ggml_vk_instance_init() {
             &enable_best_practice
         },
     };
+#ifdef GGML_VULKAN_VALIDATE_GPU_ASSISTED
+    VkBool32 enable_gpuav = VK_TRUE;
+    settings.push_back({
+        "VK_LAYER_KHRONOS_validation",
+        "gpuav_enable",
+        vk::LayerSettingTypeEXT::eBool32,
+        1,
+        &enable_gpuav
+    });
+#endif
     vk::LayerSettingsCreateInfoEXT layer_setting_info(settings);
     vk::InstanceCreateInfo instance_create_info(vk::InstanceCreateFlags{}, &app_info, layers, extensions, &layer_setting_info);
 #ifdef __APPLE__

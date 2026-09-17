@@ -226,6 +226,7 @@ option(GGML_VULKAN_DEBUG                    "ggml: enable Vulkan debug output"  
 option(GGML_VULKAN_MEMORY_DEBUG             "ggml: enable Vulkan memory debug output"         OFF)
 option(GGML_VULKAN_SHADER_DEBUG_INFO        "ggml: enable Vulkan shader debug info"           OFF)
 option(GGML_VULKAN_VALIDATE                 "ggml: enable Vulkan validation"                  OFF)
+option(GGML_VULKAN_VALIDATE_GPU_ASSISTED    "ggml: enable Vulkan GPU-assisted validation"    OFF)
 option(GGML_VULKAN_RUN_TESTS                "ggml: run Vulkan tests"                          OFF)
 option(GGML_WEBGPU                          "ggml: use WebGPU"                                OFF)
 option(GGML_WEBGPU_DEBUG                    "ggml: enable WebGPU debug output"                OFF)
@@ -235,6 +236,11 @@ option(GGML_WEBGPU_JSPI                     "ggml: use JSPI for WebGPU"         
 option(GGML_ZDNN                            "ggml: use zDNN"                                  OFF)
 option(GGML_VIRTGPU                         "ggml: use the VirtGPU/Virglrenderer API Remoting frontend"     OFF)
 option(GGML_VIRTGPU_BACKEND                 "ggml: build the VirtGPU/Virglrenderer API Remoting backend"    OFF)
+
+if (GGML_VULKAN_VALIDATE_GPU_ASSISTED)
+    set(GGML_VULKAN_VALIDATE ON)
+endif()
+
 option(GGML_METAL                           "ggml: use Metal"                                 ${GGML_METAL_DEFAULT})
 option(GGML_METAL_NDEBUG                    "ggml: disable Metal debugging"                   OFF)
 option(GGML_METAL_SHADER_DEBUG              "ggml: compile Metal with -fno-fast-math"         OFF)
