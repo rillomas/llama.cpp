@@ -15161,19 +15161,14 @@ void ggml_backend_vk_get_device_description(int device, char * description, size
     ggml_vk_get_device_description(dev_idx, description, description_size);
 }
 
-void ggml_backend_vk_get_device_memory(int device, size_t * free, size_t * total) {
+void ggml_backend_vk_get_device_memory(int device, bool is_integrated_gpu, size_t * free, size_t * total) {
     GGML_ASSERT(device < (int) vk_instance.device_indices.size());
     GGML_ASSERT(device < (int) vk_instance.device_supports_membudget.size());
 
     vk::PhysicalDevice vkdev = vk_instance.instance.enumeratePhysicalDevices()[vk_instance.device_indices[device]];
     vk::PhysicalDeviceMemoryBudgetPropertiesEXT budgetprops;
     vk::PhysicalDeviceMemoryProperties2 memprops = {};
-    vk::PhysicalDeviceProperties2 props;
-    vk::PhysicalDeviceDriverProperties driver_props;
-    props.pNext = &driver_props;
-    vkdev.getProperties2(&props);
     const bool membudget_supported = vk_instance.device_supports_membudget[device];
-    const bool is_integrated_gpu = vkdev.getProperties().deviceType == vk::PhysicalDeviceType::eIntegratedGpu;
 
     if (membudget_supported) {
         memprops.pNext = &budgetprops;
@@ -15190,14 +15185,10 @@ void ggml_backend_vk_get_device_memory(int device, size_t * free, size_t * total
             *total += heap.size;
 
             if (membudget_supported && i < budgetprops.heapUsage.size()) {
-                if (driver_props.driverID == vk::DriverId::eIntelProprietaryWindows) {
-                    // Intel Windows may report heapBudget > heap.size.
-                    // See https://github.com/ggml-org/llama.cpp/issues/29277
-                    const vk::DeviceSize budget = std::min(budgetprops.heapBudget[i], heap.size);
-                    *free += budget > budgetprops.heapUsage[i] ? budget - budgetprops.heapUsage[i] : 0;
-                } else {
-                    *free += budgetprops.heapBudget[i] - budgetprops.heapUsage[i];
-                }
+                // Driver may report heapBudget > heap.size so we add a safeguard here
+                // See https://github.com/ggml-org/llama.cpp/issues/29277
+                const vk::DeviceSize budget = std::min(budgetprops.heapBudget[i], heap.size);
+                *free += budget > budgetprops.heapUsage[i] ? budget - budgetprops.heapUsage[i] : 0;
             } else {
                 *free += heap.size;
             }
@@ -15266,7 +15257,7 @@ static const char * ggml_backend_vk_device_get_description(ggml_backend_dev_t de
 
 static void ggml_backend_vk_device_get_memory(ggml_backend_dev_t device, size_t * free, size_t * total) {
     ggml_backend_vk_device_context * ctx = (ggml_backend_vk_device_context *)device->context;
-    ggml_backend_vk_get_device_memory(ctx->device, free, total);
+    ggml_backend_vk_get_device_memory(ctx->device, ctx->is_integrated_gpu, free, total);
 }
 
 static ggml_backend_buffer_type_t ggml_backend_vk_device_get_buffer_type(ggml_backend_dev_t dev) {
@@ -16565,4 +16556,3 @@ void ggml_vk_debug_label::begin(vk_context & ctx, const std::string & name) {
     subctx->debug_labels.push_back(name);
     ggml_vk_cmd_label_begin(subctx->s->buffer->buf, subctx->debug_labels.back().c_str());
 }
-
