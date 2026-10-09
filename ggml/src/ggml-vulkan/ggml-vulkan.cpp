@@ -15161,7 +15161,7 @@ void ggml_backend_vk_get_device_description(int device, char * description, size
     ggml_vk_get_device_description(dev_idx, description, description_size);
 }
 
-void ggml_backend_vk_get_device_memory(int device, bool is_integrated_gpu, size_t * free, size_t * total) {
+void ggml_backend_vk_get_device_memory(int device, size_t * free, size_t * total) {
     GGML_ASSERT(device < (int) vk_instance.device_indices.size());
     GGML_ASSERT(device < (int) vk_instance.device_supports_membudget.size());
 
@@ -15169,6 +15169,7 @@ void ggml_backend_vk_get_device_memory(int device, bool is_integrated_gpu, size_
     vk::PhysicalDeviceMemoryBudgetPropertiesEXT budgetprops;
     vk::PhysicalDeviceMemoryProperties2 memprops = {};
     const bool membudget_supported = vk_instance.device_supports_membudget[device];
+    const bool is_integrated_gpu = vkdev.getProperties().deviceType == vk::PhysicalDeviceType::eIntegratedGpu;
 
     if (membudget_supported) {
         memprops.pNext = &budgetprops;
@@ -15257,7 +15258,7 @@ static const char * ggml_backend_vk_device_get_description(ggml_backend_dev_t de
 
 static void ggml_backend_vk_device_get_memory(ggml_backend_dev_t device, size_t * free, size_t * total) {
     ggml_backend_vk_device_context * ctx = (ggml_backend_vk_device_context *)device->context;
-    ggml_backend_vk_get_device_memory(ctx->device, ctx->is_integrated_gpu, free, total);
+    ggml_backend_vk_get_device_memory(ctx->device, free, total);
 }
 
 static ggml_backend_buffer_type_t ggml_backend_vk_device_get_buffer_type(ggml_backend_dev_t dev) {
@@ -16556,3 +16557,4 @@ void ggml_vk_debug_label::begin(vk_context & ctx, const std::string & name) {
     subctx->debug_labels.push_back(name);
     ggml_vk_cmd_label_begin(subctx->s->buffer->buf, subctx->debug_labels.back().c_str());
 }
+
