@@ -518,7 +518,9 @@ void ggml_vk_buffer_write_2d(vk_buffer& dst, size_t offset, const void * src, si
             VK_CHECK(dst->device->device.waitForFences({ dst->device->fence }, true, UINT64_MAX), "vk_buffer_write_2d uma waitForFences", dst->device);
             dst->device->device.resetFences({ dst->device->fence });
             ggml_vk_queue_command_pools_cleanup(dst->device);
+            VK_LOG_DEBUG("VK_HOST_BARRIER write_2d done");
         }
+        VK_LOG_DEBUG("VK_HOST_ACCESS write buf=" << dst->buffer << " off=" << offset << " size=" << (height - 1) * dpitch + width << " uma=" << dst->device->uma);
         if (width == spitch && width == dpitch) {
             memcpy((uint8_t *)dst->ptr + offset, src, width * height);
         } else {
@@ -662,6 +664,8 @@ void ggml_vk_buffer_read_2d(vk_buffer& src, size_t offset, void * dst, size_t sp
                  "vk_buffer_read_2d uma waitForFences", src->device);
         src->device->device.resetFences({ src->device->fence });
         ggml_vk_queue_command_pools_cleanup(src->device);
+        VK_LOG_DEBUG("VK_HOST_BARRIER read_2d done");
+        VK_LOG_DEBUG("VK_HOST_ACCESS read buf=" << src->buffer << " off=" << offset << " size=" << (height - 1) * spitch + width);
 
         if (width == spitch && width == dpitch) {
             memcpy(dst, (const uint8_t *) src->ptr + offset, width * height);
@@ -735,6 +739,7 @@ void ggml_vk_buffer_memset_async(vk_context& ctx, vk_buffer& dst, size_t offset,
 
     if (dst->memory_property_flags & vk::MemoryPropertyFlagBits::eHostVisible &&
         dst->device->uma) {
+        VK_LOG_DEBUG("VK_HOST_ACCESS memset_deferred buf=" << dst->buffer << " off=" << offset << " size=" << size << " ptr=" << (void *)((uint8_t*)dst->ptr + offset) << " ctx=" << ctx);
         deferred_memset((uint8_t*)dst->ptr + offset, c, size, &ctx->memsets);
         return;
     }
@@ -748,6 +753,7 @@ void ggml_vk_buffer_memset(vk_buffer& dst, size_t offset, uint32_t c, size_t siz
 
     if (dst->memory_property_flags & vk::MemoryPropertyFlagBits::eHostVisible &&
         dst->device->uma) {
+        VK_LOG_DEBUG("VK_HOST_ACCESS memset buf=" << dst->buffer << " off=" << offset << " size=" << size);
         memset((uint8_t*)dst->ptr + offset, c, size);
         return;
     }
