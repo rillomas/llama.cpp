@@ -502,6 +502,7 @@ void ggml_vk_buffer_write_2d(vk_buffer& dst, size_t offset, const void * src, si
     if(dst->memory_property_flags & vk::MemoryPropertyFlagBits::eHostVisible) {
         GGML_ASSERT(dst->memory_property_flags & vk::MemoryPropertyFlagBits::eHostCoherent);
 
+#if 0
         if (dst->device->uma) {
             std::lock_guard<std::recursive_mutex> guard(dst->device->mutex);
             vk_context subctx = ggml_vk_create_temporary_context(dst->device->compute_queue->cmd_pool);
@@ -520,6 +521,7 @@ void ggml_vk_buffer_write_2d(vk_buffer& dst, size_t offset, const void * src, si
             ggml_vk_queue_command_pools_cleanup(dst->device);
             VK_LOG_DEBUG("VK_HOST_BARRIER write_2d done");
         }
+#endif
         VK_LOG_DEBUG("VK_HOST_ACCESS write buf=" << dst->buffer << " off=" << offset << " size=" << (height - 1) * dpitch + width << " uma=" << dst->device->uma);
         if (width == spitch && width == dpitch) {
             memcpy((uint8_t *)dst->ptr + offset, src, width * height);
