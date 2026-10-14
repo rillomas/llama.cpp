@@ -12750,6 +12750,16 @@ bool ggml_vk_build_graph(ggml_backend_vk_context * ctx, ggml_cgraph * cgraph, in
 #endif
 
     if (submit || last_node) {
+        if (last_node) {
+            // fence wait alone does not make device writes available to the host
+            compute_ctx->s->buffer->buf.pipelineBarrier(
+                vk::PipelineStageFlagBits::eComputeShader | vk::PipelineStageFlagBits::eTransfer,
+                vk::PipelineStageFlagBits::eHost,
+                {},
+                { { vk::AccessFlagBits::eShaderWrite | vk::AccessFlagBits::eTransferWrite,
+                    vk::AccessFlagBits::eHostRead | vk::AccessFlagBits::eHostWrite } },
+                {}, {});
+        }
         ggml_vk_ctx_end(compute_ctx);
 
         // TODO probably it'd be better to pass a exit_node flag to ggml_vk_compute_forward
@@ -12787,7 +12797,6 @@ void ggml_vk_compute_forward(ggml_backend_vk_context * ctx, ggml_cgraph * cgraph
         }
 
         for (auto& mset : subctx->memsets) {
-            VK_LOG_DEBUG("VK_HOST_ACCESS memset_exec ptr=" << mset.dst << " size=" << mset.n << " ctx=" << subctx);
             memset(mset.dst, mset.val, mset.n);
         }
 
@@ -12948,7 +12957,7 @@ enum ggml_status ggml_backend_vk_buffer_init_tensor(ggml_backend_buffer_t buffer
 }
 
 void ggml_backend_vk_buffer_memset_tensor(ggml_backend_buffer_t buffer, ggml_tensor * tensor, uint8_t value, size_t offset, size_t size) {
-    VK_LOG_DEBUG("ggml_backend_vk_buffer_memset_tensor(" << buffer << ", " << tensor << " (" << tensor->name << "), " << value << ", " << offset << ", " << size << ")");
+    VK_LOG_DEBUG("ggml_backend_vk_buffer_memset_tensor(" << buffer << ", " << tensor << ", " << value << ", " << offset << ", " << size << ")");
     ggml_backend_vk_buffer_context * buf_ctx = (ggml_backend_vk_buffer_context *)buffer->context;
     vk_buffer buf = buf_ctx->dev_buffer;
 
@@ -12961,7 +12970,7 @@ void ggml_backend_vk_buffer_memset_tensor(ggml_backend_buffer_t buffer, ggml_ten
 }
 
 void ggml_backend_vk_buffer_set_tensor(ggml_backend_buffer_t buffer, ggml_tensor * tensor, const void * data, size_t offset, size_t size) {
-    VK_LOG_DEBUG("ggml_backend_vk_buffer_set_tensor(" << buffer << ", " << tensor << " (" << tensor->name << "), " << data << ", " << offset << ", " << size << ")");
+    VK_LOG_DEBUG("ggml_backend_vk_buffer_set_tensor(" << buffer << ", " << tensor << ", " << data << ", " << offset << ", " << size << ")");
     ggml_backend_vk_buffer_context * buf_ctx = (ggml_backend_vk_buffer_context *)buffer->context;
     vk_buffer buf = buf_ctx->dev_buffer;
 
@@ -13350,7 +13359,6 @@ static bool ggml_backend_vk_cpy_tensor_async(ggml_backend_t backend_src, ggml_ba
             (vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
         if ((backend_src == backend_dst || src_backend_synchronous) && backend_idle && dst_host_coherent && ggml_nbytes(src) <= max_cpu_copy_size) {
-            VK_LOG_DEBUG("ggml_backend_vk_cpy_tensor_async cpu copy (" << dst->name << ")");
             ggml_vk_buffer_write(dst_buf, vk_tensor_offset(dst) + dst->view_offs, src->data, ggml_nbytes(src));
             return true;
         }
@@ -13426,7 +13434,6 @@ void ggml_vk_synchronize(ggml_backend_vk_context * ctx) {
         if (!ctx->device->serialize_submissions) {
             ggml_vk_wait_for_fence(ctx);
         }
-        VK_LOG_DEBUG("VK_SYNC fence done (no host barrier)");
         ctx->submit_pending = false;
         if (cmd_buf) {
             cmd_buf->in_use = false;
