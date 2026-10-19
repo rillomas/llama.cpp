@@ -17,6 +17,9 @@ extern void * const vk_ptr_base;
 extern vk_instance_t vk_instance;
 extern ggml_backend_buffer_i ggml_backend_vk_buffer_interface;
 
+void ggml_vk_debug_name_object(const vk_device & device, vk::ObjectType type, uint64_t handle);
+void ggml_vk_debug_fence_result(vk_queue_handle * queue, vk::Fence fence, const char * operation, vk::Result result);
+
 // instance
 vk_device ggml_vk_get_device(size_t idx);
 DispatchLoaderDynamic & ggml_vk_default_dispatcher();

@@ -599,6 +599,10 @@ This also enables the normal validation provided by `GGML_VULKAN_VALIDATE` and a
 
 For synchronization debugging, set `GGML_VK_DISABLE_HOST_BARRIER=1` at runtime to skip the host memory barrier at the last graph node. This only skips the barrier, not command buffer submission or waiting. The barrier is enabled by default. The variable is read on first use; any value, including `0`, disables the barrier. Unset it before starting a new process to restore the default behavior. Disabling this barrier can cause synchronization errors or incorrect results and is intended only for debugging.
 
+Set `GGML_VK_DEBUG_MARKERS=1` at runtime to enable `VK_EXT_debug_utils` markers when the extension is available. `HOST memcpy: ggml_vk_buffer_write_2d` labels include the destination buffer and memory handles, binding offset, write offset, row width, row count, source and destination pitches, buffer size, and memory properties. Each row writes `[offset + row * dpitch, offset + row * dpitch + width)`. Buffer and memory binding offsets are zero in this backend. Buffers, memory allocations, and fences are named with their original handles so these labels can be matched to resource IDs in a RenderDoc XML export.
+
+`HOST fence:` labels record successful graph completion polling, almost-ready waits, synchronous buffer upload waits, and serialized graph waits before fence reset. They include the fence handle, operation, and result. These labels annotate host-side observations, not GPU commands or memory barriers. Use the XML thread IDs and timestamps to order them with host writes, and follow the named fence's queue submissions to identify which GPU work completed. A completed fence does not cover unrelated work on other queues, and synchronization validation does not by itself prove that host accesses are race-free.
+
 ## CANN
 This provides NPU acceleration using the AI cores of your Ascend NPU. And [CANN](https://www.hiascend.com/en/software/cann) is a hierarchical APIs to help you to quickly build AI applications and service based on Ascend NPU.
 

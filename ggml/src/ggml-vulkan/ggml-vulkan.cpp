@@ -341,6 +341,7 @@ void ggml_vk_wait_for_fence(ggml_backend_vk_context * ctx) {
     // during this wait.
     if (ctx->almost_ready_fence_pending) {
         VK_CHECK(ctx->device->device.waitForFences({ ctx->almost_ready_fence }, true, UINT64_MAX), "almost_ready_fence", ctx->device);
+        ggml_vk_debug_fence_result(ctx->device->compute_queue->handle.get(), ctx->almost_ready_fence, "almost_ready waitForFences", vk::Result::eSuccess);
         ctx->device->device.resetFences({ ctx->almost_ready_fence });
         ctx->almost_ready_fence_pending = false;
     }
@@ -375,6 +376,7 @@ void ggml_vk_wait_for_fence(ggml_backend_vk_context * ctx) {
             YIELD();
         }
     }
+    ggml_vk_debug_fence_result(ctx->device->compute_queue->handle.get(), ctx->fence, "getFenceStatus", result);
     ctx->device->device.resetFences({ ctx->fence });
 }
 
@@ -4901,6 +4903,7 @@ vk_device ggml_vk_get_device(size_t idx) {
         }
 
         device->fence = device->device.createFence({});
+        ggml_vk_debug_name_object(device, vk::ObjectType::eFence, (uint64_t) static_cast<VkFence>(device->fence));
 
         device->buffer_type = {
             /* .iface    = */ ggml_backend_vk_buffer_type_interface,
@@ -5512,6 +5515,8 @@ void ggml_vk_init(ggml_backend_vk_context * ctx, size_t idx) {
 
     ctx->fence = ctx->device->device.createFence({});
     ctx->almost_ready_fence = ctx->device->device.createFence({});
+    ggml_vk_debug_name_object(ctx->device, vk::ObjectType::eFence, (uint64_t) static_cast<VkFence>(ctx->fence));
+    ggml_vk_debug_name_object(ctx->device, vk::ObjectType::eFence, (uint64_t) static_cast<VkFence>(ctx->almost_ready_fence));
 
     ctx->compute_cmd_pool.init(ctx->device, ctx->device->compute_queue.get());
     if (ctx->device->async_use_transfer_queue) {
@@ -13519,6 +13524,7 @@ void ggml_vk_synchronize(ggml_backend_vk_context * ctx) {
         if (ctx->device->serialize_submissions) {
             ggml_vk_submit(compute_ctx, ctx->fence);
             VK_CHECK(ctx->device->device.waitForFences({ ctx->fence }, true, UINT64_MAX), "synchronize waitForFences", ctx->device);
+            ggml_vk_debug_fence_result(ctx->device->compute_queue->handle.get(), ctx->fence, "synchronize waitForFences", vk::Result::eSuccess);
             ctx->device->device.resetFences({ ctx->fence });
         } else {
             ggml_vk_submit(compute_ctx, {});
@@ -14416,6 +14422,7 @@ static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cg
         if (ctx->device->serialize_submissions) {
             try {
                 auto res = ctx->device->device.waitForFences({ ctx->fence }, true, UINT64_MAX);
+                ggml_vk_debug_fence_result(ctx->device->compute_queue->handle.get(), ctx->fence, "serialized waitForFences", res);
                 if (res != vk::Result::eSuccess) {
                     GGML_LOG_ERROR("ggml_vulkan: waitForFences error during serialized submission\n");
                     throw vk::SystemError(vk::make_error_code(res), "ggml_vulkan: waitForFences during serialized submission");
@@ -16670,6 +16677,29 @@ std::string vk_perf_logger::get_node_fusion_name(const ggml_tensor * node, const
 
 ggml_backend_vk_buffer_context::~ggml_backend_vk_buffer_context() {
     ggml_vk_destroy_buffer(dev_buffer);
+}
+
+void ggml_vk_debug_name_object(const vk_device & device, vk::ObjectType type, uint64_t handle) {
+    if (!vk_instance.debug_utils_support) {
+        return;
+    }
+    std::ostringstream name;
+    name << "ggml " << vk::to_string(type) << "=0x" << std::hex << handle;
+    const std::string object_name = name.str();
+    vk::DebugUtilsObjectNameInfoEXT info(type, handle, object_name.c_str());
+    VK_CHECK(static_cast<vk::Result>(vk_instance.pfn_vkSetDebugUtilsObjectNameEXT(device->device, &static_cast<VkDebugUtilsObjectNameInfoEXT &>(info))),
+             "debug object name", device);
+}
+
+void ggml_vk_debug_fence_result(vk_queue_handle * queue, vk::Fence fence, const char * operation, vk::Result result) {
+    if (!vk_instance.debug_utils_support) {
+        return;
+    }
+    std::ostringstream name;
+    name << "HOST fence: " << operation
+         << " fence=0x" << std::hex << (uint64_t) static_cast<VkFence>(fence)
+         << " result=" << vk::to_string(result);
+    ggml_vk_debug_label label(queue, name.str().c_str());
 }
 
 ggml_vk_debug_label::ggml_vk_debug_label(vk_context & ctx, const std::string & pipeline_name, uint32_t wg0, uint32_t wg1, uint32_t wg2) {

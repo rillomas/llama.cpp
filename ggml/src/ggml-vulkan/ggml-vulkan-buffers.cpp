@@ -193,6 +193,9 @@ static vk_buffer ggml_vk_create_buffer(vk_device& device, size_t size, const std
     buf->device = device;
     buf->size = size;
 
+    ggml_vk_debug_name_object(device, vk::ObjectType::eBuffer, (uint64_t) static_cast<VkBuffer>(buf->buffer));
+    ggml_vk_debug_name_object(device, vk::ObjectType::eDeviceMemory, (uint64_t) static_cast<VkDeviceMemory>(buf->device_memory));
+
     if (device->buffer_device_address) {
         const vk::BufferDeviceAddressInfo addressInfo(buf->buffer);
         buf->bda_addr = device->device.getBufferAddress(addressInfo);
@@ -576,7 +579,20 @@ void ggml_vk_buffer_write_2d(vk_buffer& dst, size_t offset, const void * src, si
     if(dst->memory_property_flags & vk::MemoryPropertyFlagBits::eHostVisible) {
         GGML_ASSERT(dst->memory_property_flags & vk::MemoryPropertyFlagBits::eHostCoherent);
 
-        ggml_vk_debug_label host_write_dbg(dst->device->compute_queue->handle.get(), "HOST memcpy: ggml_vk_buffer_write_2d");
+        std::string host_write_name;
+        if (vk_instance.debug_utils_support) {
+            std::ostringstream name;
+            name << "HOST memcpy: ggml_vk_buffer_write_2d"
+                 << " buffer=0x" << std::hex << (uint64_t) static_cast<VkBuffer>(dst->buffer)
+                 << " memory=0x" << (uint64_t) static_cast<VkDeviceMemory>(dst->device_memory)
+                 << std::dec << " bindOffset=0 offset=" << offset
+                 << " width=" << width << " height=" << height
+                 << " spitch=" << spitch << " dpitch=" << dpitch
+                 << " bufferSize=" << dst->size
+                 << " memoryFlags=" << vk::to_string(dst->memory_property_flags);
+            host_write_name = name.str();
+        }
+        ggml_vk_debug_label host_write_dbg(dst->device->compute_queue->handle.get(), host_write_name.c_str());
 
         if (width == spitch && width == dpitch) {
             memcpy((uint8_t *)dst->ptr + offset, src, width * height);
@@ -604,6 +620,7 @@ void ggml_vk_buffer_write_2d(vk_buffer& dst, size_t offset, const void * src, si
 
         ggml_vk_submit(subctx, dst->device->fence);
         VK_CHECK(dst->device->device.waitForFences({ dst->device->fence }, true, UINT64_MAX), "vk_buffer_write_2d waitForFences", dst->device);
+        ggml_vk_debug_fence_result(dst->device->transfer_queue->handle.get(), dst->device->fence, "vk_buffer_write_2d waitForFences", vk::Result::eSuccess);
         dst->device->device.resetFences({ dst->device->fence });
         ggml_vk_queue_command_pools_cleanup(dst->device);
     }
