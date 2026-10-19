@@ -576,6 +576,8 @@ void ggml_vk_buffer_write_2d(vk_buffer& dst, size_t offset, const void * src, si
     if(dst->memory_property_flags & vk::MemoryPropertyFlagBits::eHostVisible) {
         GGML_ASSERT(dst->memory_property_flags & vk::MemoryPropertyFlagBits::eHostCoherent);
 
+        ggml_vk_debug_label host_write_dbg(dst->device->compute_queue->handle.get(), "HOST memcpy: ggml_vk_buffer_write_2d");
+
         if (width == spitch && width == dpitch) {
             memcpy((uint8_t *)dst->ptr + offset, src, width * height);
         } else {
