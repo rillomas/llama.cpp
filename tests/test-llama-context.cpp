@@ -119,7 +119,8 @@ static model_result run_model(const std::string & model_path,
                               const std::vector<const ctx_test *> & cases,
                               const std::string & logs_dir,
                               bool report,
-                              bool capture_log) {
+                              bool capture_log,
+                              renderdoc_capture * renderdoc) {
     model_result res;
 
     res.name     = std::filesystem::path(model_path).filename().string();
@@ -157,7 +158,7 @@ static model_result run_model(const std::string & model_path,
         mr.params.out_file = test_state_path(res.name);
         mr.tokens          = prepare_tokens(mr.model, mr.params);
 
-        res.runs = run_cases(mr, cases, report);
+        res.runs = run_cases(mr, cases, report, renderdoc);
     }
 
     if (capture_log) {
@@ -185,6 +186,7 @@ static void print_usage(int /* argc */, char ** argv) {
     LOG("\n  --list                    list the registered cases and exit\n");
     LOG("\n  -j N, --threads N         run N models at a time in --models mode (default: min(nproc, 4))\n");
     LOG("\n  --logs DIR                keep the log of each model in DIR instead of discarding it\n");
+    LOG("\n  --renderdoc DIR           capture each executed case to RenderDoc files in DIR\n");
     LOG("\n  --logs-on-fail always     after the table, print the log of every failed model (default)\n");
     LOG("\n  --logs-on-fail never      never print the logs of the failed models\n");
     LOG("\n");
@@ -214,6 +216,7 @@ int main(int argc, char ** argv) {
     // extract our own options before handing the rest to the common parser
     std::string models_dir;
     std::string logs_dir;
+    std::string renderdoc_dir;
     std::string test_filter;
 
     bool list_cases        = false;
@@ -258,6 +261,16 @@ int main(int argc, char ** argv) {
                 return 1;
             }
             logs_dir = value;
+            continue;
+        }
+
+        const int res_renderdoc = test_opt(argv, i, argc, "--renderdoc", value);
+        if (res_renderdoc != 0) {
+            if (res_renderdoc < 0) {
+                fprintf(stderr, "--renderdoc requires a directory argument\n");
+                return 1;
+            }
+            renderdoc_dir = value;
             continue;
         }
 
@@ -322,6 +335,11 @@ int main(int argc, char ** argv) {
         return 0;
     }
 
+    if (!renderdoc_dir.empty() && !models_dir.empty()) {
+        fprintf(stderr, "--renderdoc cannot be used with --models\n");
+        return 1;
+    }
+
     // in --models mode there is no single model; set a placeholder so the common parser's
     // "--model is required" check passes (each model is set individually inside the loop)
     if (!models_dir.empty()) {
@@ -358,6 +376,17 @@ int main(int argc, char ** argv) {
     //   writes to the console as usual
     llama_log_set(test_log_callback, nullptr);
 
+    renderdoc_capture renderdoc;
+    renderdoc_capture * renderdoc_ptr = nullptr;
+    if (!renderdoc_dir.empty()) {
+        std::string error;
+        if (renderdoc.initialize(renderdoc_dir, error)) {
+            renderdoc_ptr = &renderdoc;
+        } else {
+            fprintf(stderr, "RenderDoc capture unavailable: %s; continuing without capture\n", error.c_str());
+        }
+    }
+
     llama_backend_init();
 
     // the threads a context runs on, resolved by the common parser - in table mode every worker
@@ -369,7 +398,7 @@ int main(int argc, char ** argv) {
         LOG("threads: %d\n", n_threads);
 
         const model_result res = run_model(params.model.path, params, cases, logs_dir,
-                true /* report */, !logs_dir.empty());
+                true /* report */, !logs_dir.empty(), renderdoc_ptr);
 
         size_t n_pass = 0;
         size_t n_skip = 0;
@@ -510,7 +539,7 @@ int main(int argc, char ** argv) {
         //   file of the model
         for (size_t i = next_model.fetch_add(1); i < results.size(); i = next_model.fetch_add(1)) {
             results[i] = run_model(models[i], params, cases, logs_dir,
-                    false /* report */, true /* capture_log */);
+                    false /* report */, true /* capture_log */, renderdoc_ptr);
 
             {
                 std::lock_guard<std::mutex> lock(pool_mutex);
