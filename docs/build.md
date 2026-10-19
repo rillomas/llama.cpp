@@ -586,6 +586,19 @@ cmake -B build -DGGML_VULKAN=1 -DGGML_METAL=OFF
 cmake --build build --config Release
 ```
 
+### Synchronization validation
+
+To debug Vulkan synchronization errors, enable `GGML_VULKAN_VALIDATE_SYNC` (OFF by default):
+
+```bash
+cmake -B build -DGGML_VULKAN=ON -DGGML_VULKAN_VALIDATE_SYNC=ON
+cmake --build build --config Release
+```
+
+This also enables the normal validation provided by `GGML_VULKAN_VALIDATE` and adds `VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT` when creating the Vulkan instance. The runtime requires `VK_LAYER_KHRONOS_validation` with `VK_EXT_layer_settings` and `VK_EXT_validation_features`; Vulkan initialization fails with an error if these are unavailable. Synchronization validation can significantly reduce performance and is intended for debugging.
+
+For synchronization debugging, set `GGML_VK_DISABLE_HOST_BARRIER=1` at runtime to skip the host memory barrier at the last graph node. This only skips the barrier, not command buffer submission or waiting. The barrier is enabled by default. The variable is read on first use; any value, including `0`, disables the barrier. Unset it before starting a new process to restore the default behavior. Disabling this barrier can cause synchronization errors or incorrect results and is intended only for debugging.
+
 ## CANN
 This provides NPU acceleration using the AI cores of your Ascend NPU. And [CANN](https://www.hiascend.com/en/software/cann) is a hierarchical APIs to help you to quickly build AI applications and service based on Ascend NPU.
 

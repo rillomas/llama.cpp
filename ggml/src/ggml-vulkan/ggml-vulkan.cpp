@@ -5229,6 +5229,23 @@ void ggml_vk_instance_init() {
     if (layer_settings) {
         extensions.push_back("VK_EXT_layer_settings");
     }
+#ifdef GGML_VULKAN_VALIDATE_SYNC
+    bool validation_features_ext = false;
+    if (layer_settings) {
+        const std::string layer_name = "VK_LAYER_KHRONOS_validation";
+        for (const auto& ext : vk::enumerateInstanceExtensionProperties(layer_name)) {
+            if (strcmp(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME, ext.extensionName.data()) == 0) {
+                validation_features_ext = true;
+                break;
+            }
+        }
+    }
+    if (!validation_features_ext) {
+        GGML_LOG_ERROR("ggml_vulkan: Synchronization validation requires VK_LAYER_KHRONOS_validation with VK_EXT_layer_settings and VK_EXT_validation_features.\n");
+        throw vk::SystemError(vk::Result::eErrorExtensionNotPresent, "Vulkan synchronization validation unavailable");
+    }
+    extensions.push_back(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
+#endif
 #ifdef __APPLE__
     if (portability_enumeration_ext) {
         extensions.push_back("VK_KHR_portability_enumeration");
@@ -5248,6 +5265,13 @@ void ggml_vk_instance_init() {
         },
     };
     vk::LayerSettingsCreateInfoEXT layer_setting_info(settings);
+#ifdef GGML_VULKAN_VALIDATE_SYNC
+    const vk::ValidationFeatureEnableEXT sync_validation = vk::ValidationFeatureEnableEXT::eSynchronizationValidation;
+    vk::ValidationFeaturesEXT validation_features;
+    validation_features.enabledValidationFeatureCount = 1;
+    validation_features.pEnabledValidationFeatures = &sync_validation;
+    layer_setting_info.pNext = &validation_features;
+#endif
     vk::InstanceCreateInfo instance_create_info(vk::InstanceCreateFlags{}, &app_info, layers, extensions, &layer_setting_info);
 #ifdef __APPLE__
     if (portability_enumeration_ext) {
@@ -12842,7 +12866,8 @@ bool ggml_vk_build_graph(ggml_backend_vk_context * ctx, ggml_cgraph * cgraph, in
 #endif
 
     if (submit || last_node) {
-        if (last_node) {
+        static const bool disable_host_barrier = getenv("GGML_VK_DISABLE_HOST_BARRIER") != nullptr;
+        if (last_node && !disable_host_barrier) {
             // fence wait alone does not make device writes available to the host
             compute_ctx->s->buffer->buf.pipelineBarrier(
                 vk::PipelineStageFlagBits::eComputeShader | vk::PipelineStageFlagBits::eTransfer,
@@ -16705,4 +16730,3 @@ void ggml_vk_debug_label::begin(vk_context & ctx, const std::string & name) {
     subctx->debug_labels.push_back(name);
     ggml_vk_cmd_label_begin(subctx->s->buffer->buf, subctx->debug_labels.back().c_str());
 }
-
