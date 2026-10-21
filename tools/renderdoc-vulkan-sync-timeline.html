@@ -129,6 +129,20 @@
             max-width: none;
         }
 
+        .timeline-tooltip {
+            position: fixed;
+            z-index: 1;
+            max-width: 360px;
+            padding: 7px 9px;
+            border: 1px solid #4b525c;
+            border-radius: 5px;
+            background: #292d33;
+            color: #e4e7eb;
+            font-size: 0.85rem;
+            white-space: pre-line;
+            pointer-events: none;
+        }
+
         table {
             border-collapse: collapse;
             width: 100%;
@@ -259,6 +273,7 @@
         </section>
     </section>
 </main>
+<div id="timeline-tooltip" class="timeline-tooltip" role="tooltip" hidden></div>
 <script>
     "use strict";
 
@@ -271,6 +286,7 @@
     const eventsBody = document.getElementById("event-list");
     const canvas = document.getElementById("timeline");
     const timelineScroll = document.getElementById("timeline-scroll");
+    const timelineTooltip = document.getElementById("timeline-tooltip");
     const zoomSlider = document.getElementById("zoom-slider");
     const context = canvas.getContext("2d");
     const maxUint64 = (1n << 64n) - 1n;
@@ -793,7 +809,75 @@
         return "#858b94";
     }
 
+    function timelineEventAt(clientX, clientY) {
+        if (events.length === 0) return null;
+        const bounds = canvas.getBoundingClientRect();
+        const rowHeight = Number(canvas.dataset.rowHeight || 42);
+        const x = clientX - bounds.left;
+        const y = clientY - bounds.top;
+        const laneIndex = Math.floor((y - 8) / rowHeight);
+        const lane = lanes[laneIndex];
+        if (!lane) return null;
+        const plotLeft = Number(canvas.dataset.plotLeft || 0);
+        const plotWidth = Number(canvas.dataset.plotWidth || 0);
+        const minTime = BigInt(canvas.dataset.minTime || "0");
+        const range = Number(canvas.dataset.range || 1);
+        if (plotWidth <= 0 || range <= 0) return null;
+        const resource = lane.startsWith("Buffer ") ? lane.slice(7) : "";
+        let hovered = null;
+        for (const item of events) {
+            if (!item.visualLanes.includes(lane)) continue;
+            const duration = item.labelEndTimestamp !== undefined
+                ? item.labelEndTimestamp - item.timestamp
+                : item.duration;
+            const eventX = plotLeft + Number(item.timestamp - minTime) / range * plotWidth;
+            const durationWidth = Number(duration) / range * plotWidth;
+            let barWidth = Math.max(2, Math.min(100, durationWidth));
+            if (item.type === "barrier") barWidth = 2;
+            if (item.type === "label") {
+                barWidth = item.labelEndTimestamp !== undefined ? Math.max(2, durationWidth) : 2;
+            }
+            const barY = laneIndex * rowHeight + (item.type === "label" ? 10 : 8);
+            const barHeight = item.type === "label" ? 15 : 19;
+            if (y < barY - 3 || y > barY + barHeight + 3) continue;
+            if (x < eventX - 4 || x > eventX + barWidth + 4) continue;
+            hovered = item;
+        }
+        return hovered ? { event: hovered, resource } : null;
+    }
+
+    function timelineTooltipText(event, resource) {
+        let type = event.name;
+        if (event.type === "dispatch") {
+            type = "Dispatch (access unknown)";
+        } else if (event.type === "transfer") {
+            const access = event.accesses.find(item => item.resource === resource);
+            type = access ? `Buffer ${access.mode}` : "Buffer transfer";
+        } else if (event.type === "barrier") {
+            type = event.barrierLabel || "Pipeline barrier";
+        } else if (event.type === "label") {
+            type = "Debug label";
+        }
+        const hazards = event.hazards.filter(hazard => !resource || hazard.resource === resource);
+        const warnings = Array.from(new Set(hazards.map(hazard =>
+            hazard.covered ? "Dependency covered" : "Uncovered dependency"
+        )));
+        return [type, event.name, ...warnings].filter(Boolean).join("\n");
+    }
+
+    function hideTimelineTooltip() {
+        timelineTooltip.hidden = true;
+    }
+
+    function showTimelineTooltip(event, clientX, clientY) {
+        timelineTooltip.textContent = timelineTooltipText(event.event, event.resource);
+        timelineTooltip.hidden = false;
+        timelineTooltip.style.left = `${Math.max(8, Math.min(clientX + 12, window.innerWidth - timelineTooltip.offsetWidth - 8))}px`;
+        timelineTooltip.style.top = `${Math.max(8, Math.min(clientY + 12, window.innerHeight - timelineTooltip.offsetHeight - 8))}px`;
+    }
+
     function drawTimeline() {
+        hideTimelineTooltip();
         const visible = events;
         if (visible.length === 0) return;
         const minTime = visible.reduce((value, event) => event.timestamp < value ? event.timestamp : value, visible[0].timestamp);
@@ -1021,6 +1105,20 @@
         const anchorX = event.clientX - bounds.left;
         setZoom(zoom * Math.exp(-event.deltaY * 0.002), anchorX);
     }, { passive: false });
+    timelineScroll.addEventListener("scroll", hideTimelineTooltip);
+    canvas.addEventListener("pointermove", event => {
+        const hovered = timelineEventAt(event.clientX, event.clientY);
+        canvas.style.cursor = hovered ? "pointer" : "";
+        if (hovered) {
+            showTimelineTooltip(hovered, event.clientX, event.clientY);
+        } else {
+            hideTimelineTooltip();
+        }
+    });
+    canvas.addEventListener("pointerleave", () => {
+        canvas.style.cursor = "";
+        hideTimelineTooltip();
+    });
     canvas.addEventListener("click", event => {
         if (!events.length) return;
         const bounds = canvas.getBoundingClientRect();
