@@ -177,6 +177,16 @@ set(LLAMA_CONTEXT_TEST_SRC
     llama-context/test-util.cpp
 )
 llama_build(${LLAMA_CONTEXT_TEST_SRC})
+set(RENDERDOC_APP_HEADER "${PROJECT_SOURCE_DIR}/vendor/renderdoc/renderdoc/api/app/renderdoc_app.h")
+if (EXISTS "${RENDERDOC_APP_HEADER}" AND (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux"))
+    target_include_directories(test-llama-context PRIVATE "${PROJECT_SOURCE_DIR}/vendor/renderdoc/renderdoc/api/app")
+    target_compile_definitions(test-llama-context PRIVATE LLAMA_TEST_RENDERDOC)
+    if (CMAKE_DL_LIBS)
+        target_link_libraries(test-llama-context PRIVATE ${CMAKE_DL_LIBS})
+    endif()
+else()
+    message(STATUS "RenderDoc SDK unavailable or unsupported; test-llama-context capture is disabled")
+endif()
 
 if (NOT WIN32 OR NOT BUILD_SHARED_LIBS)
     # these tests are disabled on Windows because they use internal functions not exported with LLAMA_API (when building with shared libraries)

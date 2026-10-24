@@ -1,0 +1,1149 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>RenderDoc Vulkan Sync Timeline</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            font-family: system-ui, sans-serif;
+            background: #15171a;
+            color: #e4e7eb;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+        }
+
+        main {
+            max-width: 1440px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            margin: 0 0 8px;
+            font-size: 1.5rem;
+        }
+
+        p {
+            color: #aeb5bd;
+            line-height: 1.5;
+        }
+
+        .drop-area, .panel {
+            border: 1px solid #383d44;
+            border-radius: 8px;
+            background: #1e2126;
+            padding: 16px;
+            margin: 14px 0;
+        }
+
+        .drop-area {
+            border-style: dashed;
+        }
+
+        .drop-area.dragging {
+            border-color: #72b7ff;
+            background: #202b38;
+        }
+
+        button, input, select {
+            font: inherit;
+            color: inherit;
+            background: #292d33;
+            border: 1px solid #4b525c;
+            border-radius: 5px;
+            padding: 7px 10px;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #373d45;
+        }
+
+        .controls {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .zoom-controls input[type="range"] {
+            width: min(260px, 35vw);
+            padding: 0;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin: 14px 0;
+        }
+
+        .stat {
+            border: 1px solid #383d44;
+            border-radius: 7px;
+            padding: 12px;
+            background: #1e2126;
+        }
+
+        .stat strong {
+            display: block;
+            font-size: 1.35rem;
+            margin-top: 4px;
+        }
+
+        .warning {
+            color: #ff9c8f;
+        }
+
+        .good {
+            color: #83d29c;
+        }
+
+        .muted {
+            color: #aeb5bd;
+        }
+
+        .scroll {
+            overflow: auto;
+            border: 1px solid #383d44;
+            border-radius: 6px;
+            background: #181a1e;
+        }
+
+        canvas {
+            display: block;
+            max-width: none;
+        }
+
+        .timeline-tooltip {
+            position: fixed;
+            z-index: 1;
+            max-width: 360px;
+            padding: 7px 9px;
+            border: 1px solid #4b525c;
+            border-radius: 5px;
+            background: #292d33;
+            color: #e4e7eb;
+            font-size: 0.85rem;
+            white-space: pre-line;
+            pointer-events: none;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 0.9rem;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 8px 10px;
+            border-bottom: 1px solid #343940;
+            vertical-align: top;
+        }
+
+        th {
+            position: sticky;
+            top: 0;
+            background: #25292f;
+        }
+
+        tr {
+            cursor: pointer;
+        }
+
+        tr:hover {
+            background: #292e35;
+        }
+
+        .details {
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            color: #c2c8cf;
+        }
+
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            font-size: 0.88rem;
+        }
+
+        .swatch {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            margin-right: 5px;
+            border-radius: 2px;
+        }
+
+        [hidden] {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+<main>
+    <h1>RenderDoc Vulkan Sync Timeline</h1>
+    <p>Analyze a RenderDoc XML export in your browser. The file is not uploaded.</p>
+    <section class="drop-area" id="drop-area">
+        <label>Select an XML file: <input id="file-input" type="file" accept=".xml,.txt"></label>
+        <span id="file-name" class="muted"></span>
+        <p>Or drop an XML file here.</p>
+    </section>
+    <p id="status" role="status" class="muted">Load a RenderDoc Vulkan XML file.</p>
+    <section id="results" hidden>
+        <div class="stats">
+            <div class="stat">Events<strong id="stat-events">0</strong></div>
+            <div class="stat">Barriers<strong id="stat-barriers">0</strong></div>
+            <div class="stat">Uncovered transfer hazards<strong id="stat-hazards" class="warning">0</strong></div>
+            <div class="stat">Dependencies covered<strong id="stat-covered" class="good">0</strong></div>
+            <div class="stat">Dispatches with unknown access<strong id="stat-unknown">0</strong></div>
+        </div>
+        <section class="panel">
+            <div class="legend">
+                <span><i class="swatch" style="background:#d99445"></i>Dispatch (access unknown)</span>
+                <span><i class="swatch" style="background:#5cb9b2"></i>Buffer read</span>
+                <span><i class="swatch" style="background:#6ca8e8"></i>Buffer write</span>
+                <span><i class="swatch" style="background:#f0a35e"></i>Barrier: HOST -> device</span>
+                <span><i class="swatch" style="background:#df7291"></i>Barrier: device -> HOST</span>
+                <span><i class="swatch" style="background:#d66ad3"></i>Barrier: HOST -> HOST</span>
+                <span><i class="swatch" style="background:#a980d5"></i>Barrier: compute / transfer</span>
+                <span><i class="swatch" style="background:#8469c6"></i>Barrier: compute</span>
+                <span><i class="swatch" style="background:#3d9e91"></i>Barrier: transfer</span>
+                <span><i class="swatch" style="background:#4d8fc4"></i>Barrier: graphics</span>
+                <span><i class="swatch" style="background:#858b94"></i>Barrier: other / all commands</span>
+                <span><i class="swatch" style="background:#e3675b"></i>Uncovered dependency</span>
+                <span><i class="swatch" style="background:#65bd84"></i>Dependency covered</span>
+                <span><i class="swatch" style="background:#858b94"></i>Debug label</span>
+            </div>
+            <div class="zoom-controls">
+                <button id="zoom-out" type="button" aria-label="Zoom out">-</button>
+                <input id="zoom-slider" type="range" min="1" max="16" step="0.25" value="1" aria-label="Timeline zoom">
+                <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+                <button id="zoom-fit" type="button">Fit</button>
+                <output id="zoom-level" for="zoom-slider">1.00x</output>
+                <span class="muted">Ctrl+wheel to zoom; scroll horizontally to pan</span>
+            </div>
+            <p id="timeline-info" class="muted"></p>
+            <div class="scroll" id="timeline-scroll"><canvas id="timeline"></canvas></div>
+        </section>
+        <section class="panel">
+            <div class="controls">
+                <input id="search" type="search" placeholder="Filter by event, label, or resource">
+                <select id="filter">
+                    <option value="all">All events</option>
+                    <option value="hazards">Uncovered dependencies</option>
+                    <option value="covered">Covered dependencies</option>
+                    <option value="barriers">Pipeline barrier</option>
+                    <option value="dispatch">Dispatch</option>
+                    <option value="transfer">Transfer access</option>
+                </select>
+                <span id="event-count" class="muted"></span>
+            </div>
+            <div class="scroll" style="max-height: 480px; margin-top: 12px">
+                <table>
+                    <thead><tr><th>Relative time (ticks)</th><th>Command</th><th>Command buffer</th><th>Debug label</th><th>Details</th></tr></thead>
+                    <tbody id="event-list"></tbody>
+                </table>
+            </div>
+        </section>
+        <section class="panel">
+            <strong>Selected event</strong>
+            <p id="event-details" class="details">Select an event in the timeline or list.</p>
+        </section>
+        <section class="panel">
+            <strong>Analysis scope and limitations</strong>
+            <p>For known transfer accesses, the analyzer checks for a memory dependency with matching access scopes for Write -> Read (RAW) and Write -> Write (WAW), and an execution dependency for Read -> Write (WAR).</p>
+            <p>This RenderDoc XML does not record which buffers a Dispatch accesses or whether the shader reads or writes them. Dispatches are shown as access unknown and excluded from automatic analysis. Dependency checks are limited to vkCmdCopyBuffer commands in the same command buffer. This is not a complete Vulkan synchronization validation; resource aliasing, out-of-range shader accesses, synchronization between queues, and layout transitions are not fully checked.</p>
+        </section>
+    </section>
+</main>
+<div id="timeline-tooltip" class="timeline-tooltip" role="tooltip" hidden></div>
+<script>
+    "use strict";
+
+    const fileInput = document.getElementById("file-input");
+    const dropArea = document.getElementById("drop-area");
+    const status = document.getElementById("status");
+    const results = document.getElementById("results");
+    const searchInput = document.getElementById("search");
+    const filterInput = document.getElementById("filter");
+    const eventsBody = document.getElementById("event-list");
+    const canvas = document.getElementById("timeline");
+    const timelineScroll = document.getElementById("timeline-scroll");
+    const timelineTooltip = document.getElementById("timeline-tooltip");
+    const zoomSlider = document.getElementById("zoom-slider");
+    const context = canvas.getContext("2d");
+    const maxUint64 = (1n << 64n) - 1n;
+    let events = [];
+    let lanes = [];
+    let zoom = 1;
+
+    function xmlAttributes(source) {
+        const attrs = {};
+        for (const match of source.matchAll(/([\w:-]+)="([^"]*)"/g)) {
+            attrs[match[1]] = match[2]
+                .replaceAll("&quot;", "\"")
+                .replaceAll("&apos;", "'")
+                .replaceAll("&lt;", "<")
+                .replaceAll("&gt;", ">")
+                .replaceAll("&amp;", "&");
+        }
+        return attrs;
+    }
+
+    function leafElements(source) {
+        const found = [];
+        const re = /<(ResourceId|enum|uint|int|string|bool|float)\b([^>]*?)(?:\/>|>([\s\S]*?)<\/\1\s*>)/g;
+        for (const match of source.matchAll(re)) {
+            found.push({
+                tag: match[1],
+                attrs: xmlAttributes(match[2]),
+                value: (match[3] || "").trim()
+            });
+        }
+        return found;
+    }
+
+    function namedLeaf(leaves, name) {
+        return leaves.find(item => item.attrs.name === name);
+    }
+
+    function structElements(source) {
+        const structures = [];
+        const stack = [];
+        const re = /<\/?struct\b[^>]*>/g;
+        for (const match of source.matchAll(re)) {
+            if (match[0].startsWith("</")) {
+                const open = stack.pop();
+                if (open) {
+                    structures.push({
+                        attrs: open.attrs,
+                        body: source.slice(open.end, match.index),
+                        index: open.index
+                    });
+                }
+            } else if (!match[0].endsWith("/>")) {
+                stack.push({
+                    attrs: xmlAttributes(match[0].slice(7, -1)),
+                    end: match.index + match[0].length,
+                    index: match.index
+                });
+            }
+        }
+        return structures.sort((left, right) => left.index - right.index);
+    }
+
+    function leafText(item) {
+        return item ? (item.attrs.string || item.value) : "";
+    }
+
+    function parseInteger(value, fallback = 0n) {
+        if (!value) return fallback;
+        try {
+            return BigInt(value);
+        } catch {
+            throw new Error(`Could not parse numeric field: ${value}`);
+        }
+    }
+
+    function splitFlags(value) {
+        return new Set(value.split("|").map(item => item.trim()).filter(Boolean));
+    }
+
+    function barrierStageKinds(stages, accesses) {
+        const flags = Array.from(stages);
+        const kinds = [];
+        if (flags.some(flag => flag.includes("ALL_COMMANDS_BIT"))) return ["ALL"];
+        if (flags.some(flag => flag.includes("HOST_BIT")) || Array.from(accesses).some(flag => flag.includes("HOST_"))) {
+            kinds.push("HOST");
+        }
+        if (flags.some(flag => /(?:TRANSFER|COPY|BLIT|RESOLVE|CLEAR)_BIT/.test(flag))) kinds.push("TRANSFER");
+        if (flags.some(flag => flag.includes("COMPUTE_SHADER_BIT"))) kinds.push("COMPUTE");
+        if (flags.some(flag => /(?:DRAW_INDIRECT|VERTEX_INPUT|VERTEX_SHADER|TESSELLATION|GEOMETRY_SHADER|FRAGMENT_SHADER|FRAGMENT_TESTS|COLOR_ATTACHMENT_OUTPUT)_BIT/.test(flag))) {
+            kinds.push("GRAPHICS");
+        }
+        return kinds.length > 0 ? kinds : ["OTHER"];
+    }
+
+    function barrierDescription(scopes) {
+        const srcKinds = new Set();
+        const dstKinds = new Set();
+        for (const scope of scopes) {
+            for (const kind of barrierStageKinds(scope.srcStage, scope.srcAccess)) srcKinds.add(kind);
+            for (const kind of barrierStageKinds(scope.dstStage, scope.dstAccess)) dstKinds.add(kind);
+        }
+        const source = Array.from(srcKinds).filter(kind => kind !== "OTHER").join(" / ") || "OTHER";
+        const destination = Array.from(dstKinds).filter(kind => kind !== "OTHER").join(" / ") || "OTHER";
+        let type = "other";
+        if (srcKinds.has("HOST") && dstKinds.has("HOST")) {
+            type = "host-host";
+        } else if (srcKinds.has("HOST")) {
+            type = "host-to-device";
+        } else if (dstKinds.has("HOST")) {
+            type = "device-to-host";
+        } else if (srcKinds.has("ALL") || dstKinds.has("ALL")) {
+            type = "all";
+        } else if (srcKinds.has("GRAPHICS") || dstKinds.has("GRAPHICS")) {
+            type = "graphics";
+        } else if ((srcKinds.has("COMPUTE") || dstKinds.has("COMPUTE")) &&
+                   (srcKinds.has("TRANSFER") || dstKinds.has("TRANSFER"))) {
+            type = "compute-transfer";
+        } else if (srcKinds.has("COMPUTE") || dstKinds.has("COMPUTE")) {
+            type = "compute";
+        } else if (srcKinds.has("TRANSFER") || dstKinds.has("TRANSFER")) {
+            type = "transfer";
+        }
+        return {
+            type,
+            label: source === destination ? source : `${source} -> ${destination}`
+        };
+    }
+
+    function parseBarrierScopes(body, leaves) {
+        const scopes = [];
+        for (const structure of structElements(body)) {
+            const type = structure.attrs.typename || "";
+            if (!/^Vk(?:Memory|BufferMemory|ImageMemory)Barrier2?$/.test(type)) continue;
+            const values = leafElements(structure.body);
+            const buffer = namedLeaf(values, "buffer");
+            const offset = namedLeaf(values, "offset");
+            const size = namedLeaf(values, "size");
+            if (type.includes("Buffer") && (!buffer || !offset || !size)) {
+                scopes.push({
+                    kind: "buffer",
+                    resource: "",
+                    offset: 0n,
+                    size: 0n,
+                    srcAccess: new Set(),
+                    dstAccess: new Set(),
+                    srcStage: new Set(),
+                    dstStage: new Set()
+                });
+                continue;
+            }
+            scopes.push({
+                kind: type.includes("Buffer") ? "buffer" : type.includes("Image") ? "image" : "memory",
+                resource: buffer ? buffer.value : "",
+                offset: parseInteger(offset && offset.value),
+                size: parseInteger(size && size.value, maxUint64),
+                srcAccess: splitFlags(leafText(namedLeaf(values, "srcAccessMask"))),
+                dstAccess: splitFlags(leafText(namedLeaf(values, "dstAccessMask"))),
+                srcStage: splitFlags(leafText(namedLeaf(values, "srcStageMask"))),
+                dstStage: splitFlags(leafText(namedLeaf(values, "dstStageMask")))
+            });
+        }
+        if (scopes.length === 0) {
+            scopes.push({
+                kind: "memory",
+                resource: "",
+                offset: 0n,
+                size: maxUint64,
+                srcAccess: splitFlags(leafText(namedLeaf(leaves, "srcAccessMask"))),
+                dstAccess: splitFlags(leafText(namedLeaf(leaves, "dstAccessMask"))),
+                srcStage: splitFlags(leafText(namedLeaf(leaves, "srcStageMask"))),
+                dstStage: splitFlags(leafText(namedLeaf(leaves, "dstStageMask")))
+            });
+        }
+        const outerSrcStage = splitFlags(leafText(namedLeaf(leaves, "srcStageMask")));
+        const outerDstStage = splitFlags(leafText(namedLeaf(leaves, "dstStageMask") || namedLeaf(leaves, "destStageMask")));
+        for (const scope of scopes) {
+            if (scope.srcStage.size === 0) scope.srcStage = outerSrcStage;
+            if (scope.dstStage.size === 0) scope.dstStage = outerDstStage;
+        }
+        return scopes;
+    }
+
+    function bufferCopyAccesses(body, leaves) {
+        const srcBuffer = namedLeaf(leaves, "srcBuffer");
+        const dstBuffer = namedLeaf(leaves, "destBuffer");
+        if (!srcBuffer || !dstBuffer) return [];
+        const regions = [];
+        for (const structure of structElements(body)) {
+            if ((structure.attrs.typename || "") !== "VkBufferCopy") continue;
+            const fields = leafElements(structure.body);
+            const srcOffset = namedLeaf(fields, "srcOffset");
+            const dstOffset = namedLeaf(fields, "dstOffset");
+            const size = namedLeaf(fields, "size");
+            if (!srcOffset || !dstOffset || !size) {
+                throw new Error("VkBufferCopy region is missing an offset or size.");
+            }
+            regions.push({
+                srcOffset: parseInteger(srcOffset.value),
+                dstOffset: parseInteger(dstOffset.value),
+                size: parseInteger(size.value)
+            });
+        }
+        if (regions.length === 0) return [];
+        const accesses = [];
+        for (const region of regions) {
+            accesses.push({ resource: srcBuffer.value, offset: region.srcOffset, size: region.size, mode: "read" });
+            accesses.push({ resource: dstBuffer.value, offset: region.dstOffset, size: region.size, mode: "write" });
+        }
+        return accesses;
+    }
+
+    function parseEvents(xml) {
+        const chunkRe = /<chunk\b([^>]*)>([\s\S]*?)<\/chunk\s*>/g;
+        const parsed = [];
+        const labelStacks = new Map();
+        let totalChunks = 0;
+        for (const match of xml.matchAll(chunkRe)) {
+            totalChunks++;
+            const attrs = xmlAttributes(match[1]);
+            const name = attrs.name || "";
+            const body = match[2];
+            if (!(name.startsWith("vkCmd") || name.startsWith("vkQueue"))) continue;
+            if (name === "vkCmdPushConstants" || name === "vkCmdBindPipeline" || name === "vkCmdBindDescriptorSets") continue;
+            const leaves = leafElements(body);
+            const commandBufferNode = namedLeaf(leaves, "commandBuffer");
+            const queueNode = namedLeaf(leaves, "queue");
+            const isQueueBeginLabel = name === "vkQueueBeginDebugUtilsLabelEXT";
+            const isQueueEndLabel = name === "vkQueueEndDebugUtilsLabelEXT";
+            const lane = commandBufferNode
+                ? `CB ${commandBufferNode.value}`
+                : (isQueueBeginLabel || isQueueEndLabel) && queueNode
+                    ? `Queue ${queueNode.value}`
+                    : "Queue / host";
+            if (!labelStacks.has(lane)) labelStacks.set(lane, []);
+            const stack = labelStacks.get(lane);
+            const isBeginLabel = /(?:Cmd|Queue)BeginDebugUtilsLabel/.test(name);
+            const isEndLabel = /(?:Cmd|Queue)EndDebugUtilsLabel/.test(name);
+            let label = stack.map(item => item.name).filter(Boolean).join(" / ");
+            let closedLabel = null;
+            let type = "other";
+            let detail = "";
+            let accesses = [];
+            let barrierScopes = [];
+            let barrierLabel = "";
+            let barrierType = "";
+            if (name.includes("PipelineBarrier")) {
+                type = "barrier";
+                barrierScopes = parseBarrierScopes(body, leaves);
+                const barrier = barrierDescription(barrierScopes);
+                barrierLabel = `Pipeline barrier (${barrier.label})`;
+                barrierType = barrier.type;
+                const srcStage = leafText(namedLeaf(leaves, "srcStageMask"));
+                const dstStage = leafText(namedLeaf(leaves, "dstStageMask") || namedLeaf(leaves, "destStageMask"));
+                const accessText = barrierScopes.map(scope =>
+                    `${Array.from(scope.srcAccess).join(" | ") || "0"} -> ${Array.from(scope.dstAccess).join(" | ") || "0"}`
+                ).join("; ");
+                detail = `${barrier.label}; ${srcStage || "stage scope unknown"} -> ${dstStage || "stage scope unknown"}; ${accessText}`;
+            } else if (name === "vkCmdDispatch" || name === "vkCmdDispatchBase") {
+                type = "dispatch";
+                detail = "shader access mode is not present in this XML";
+            } else if (name === "vkCmdCopyBuffer") {
+                type = "transfer";
+                accesses = bufferCopyAccesses(body, leaves);
+                detail = accesses.map(access => `${access.mode} buffer ${access.resource} [${access.offset}, ${access.offset + access.size})`).join("; ");
+            } else if (isBeginLabel || isEndLabel) {
+                type = "label";
+                const labelStruct = structElements(body).find(structure => structure.attrs.name === "Label");
+                if (isBeginLabel && labelStruct) {
+                    const labelLeaves = leafElements(labelStruct.body);
+                    const nameNode = namedLeaf(labelLeaves, "pLabelName");
+                    const labelName = leafText(nameNode);
+                    stack.push({ name: labelName, event: null });
+                    label = stack.map(item => item.name).filter(Boolean).join(" / ");
+                    detail = labelName;
+                } else if (isEndLabel) {
+                    detail = label || "end label";
+                    closedLabel = stack.pop();
+                    label = stack.map(item => item.name).filter(Boolean).join(" / ");
+                }
+            } else {
+                continue;
+            }
+            const event = {
+                index: Number(attrs.chunkIndex || parsed.length),
+                timestamp: parseInteger(attrs.timestamp),
+                duration: parseInteger(attrs.duration),
+                name,
+                lane,
+                label,
+                type,
+                barrierLabel,
+                barrierType,
+                detail,
+                accesses,
+                barrierScopes,
+                hazards: [],
+                buffer: commandBufferNode ? commandBufferNode.value : "",
+                visualLanes: []
+            };
+            if (isQueueBeginLabel && stack.length > 0) {
+                stack[stack.length - 1].event = event;
+            }
+            if (isQueueEndLabel && closedLabel && closedLabel.event) {
+                closedLabel.event.labelEndTimestamp = event.timestamp;
+            }
+            if (type === "transfer" && accesses.length === 0) {
+                event.detail = "VkBufferCopy region could not be read";
+            }
+            parsed.push(event);
+        }
+        if (totalChunks === 0) {
+            throw new Error("No RenderDoc <chunk> elements found in the XML.");
+        }
+        return parsed;
+    }
+
+    function assignTimelineLanes(parsed) {
+        const resourcesByCommandBuffer = new Map();
+        const resourceLanes = new Map();
+        const commandBufferLanes = new Map();
+        function addResource(commandBuffer, resource) {
+            if (!resource) return;
+            if (!resourcesByCommandBuffer.has(commandBuffer)) {
+                resourcesByCommandBuffer.set(commandBuffer, new Set());
+            }
+            resourcesByCommandBuffer.get(commandBuffer).add(resource);
+            if (!resourceLanes.has(resource)) {
+                resourceLanes.set(resource, `Buffer ${resource}`);
+                lanes.push(resourceLanes.get(resource));
+            }
+        }
+        function commandLane(commandBuffer) {
+            if (!commandBufferLanes.has(commandBuffer)) {
+                const lane = "Other / resource unknown";
+                commandBufferLanes.set(commandBuffer, lane);
+                if (!lanes.includes(lane)) lanes.push(lane);
+            }
+            return commandBufferLanes.get(commandBuffer);
+        }
+
+        lanes = [];
+        for (const event of parsed) {
+            for (const access of event.accesses) addResource(event.buffer, access.resource);
+            for (const scope of event.barrierScopes) {
+                if (scope.kind === "buffer") addResource(event.buffer, scope.resource);
+            }
+        }
+        for (const event of parsed) {
+            if (event.type === "transfer") {
+                event.visualLanes = Array.from(new Set(event.accesses.map(access => resourceLanes.get(access.resource)).filter(Boolean)));
+            } else if (event.type === "barrier") {
+                const scopedResources = event.barrierScopes
+                    .filter(scope => scope.kind === "buffer")
+                    .map(scope => resourceLanes.get(scope.resource))
+                    .filter(Boolean);
+                if (scopedResources.length > 0) {
+                    event.visualLanes.push(...scopedResources);
+                }
+                if (event.barrierScopes.some(scope => scope.kind === "memory")) {
+                    event.visualLanes.push(...Array.from(resourcesByCommandBuffer.get(event.buffer) || [])
+                        .map(resource => resourceLanes.get(resource)));
+                }
+                event.visualLanes = Array.from(new Set(event.visualLanes));
+            }
+            if (event.type === "label" && event.lane.startsWith("Queue ")) {
+                event.visualLanes = [event.lane];
+                if (!lanes.includes(event.lane)) lanes.push(event.lane);
+            }
+            if (event.visualLanes.length === 0) event.visualLanes = [commandLane(event.buffer)];
+        }
+    }
+
+    function stageMatches(stages) {
+        return stages.has("VK_PIPELINE_STAGE_ALL_COMMANDS_BIT") ||
+            stages.has("VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT") ||
+            stages.has("VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT_KHR") ||
+            stages.has("VK_PIPELINE_STAGE_TRANSFER_BIT") ||
+            stages.has("VK_PIPELINE_STAGE_2_TRANSFER_BIT") ||
+            stages.has("VK_PIPELINE_STAGE_2_TRANSFER_BIT_KHR") ||
+            stages.has("VK_PIPELINE_STAGE_2_COPY_BIT") ||
+            stages.has("VK_PIPELINE_STAGE_2_COPY_BIT_KHR") ||
+            stages.has("VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT") ||
+            stages.has("VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT_KHR");
+    }
+
+    function accessMatches(flags, mode) {
+        const expected = mode === "read"
+            ? ["VK_ACCESS_TRANSFER_READ_BIT", "VK_ACCESS_2_TRANSFER_READ_BIT", "VK_ACCESS_2_TRANSFER_READ_BIT_KHR", "VK_ACCESS_MEMORY_READ_BIT", "VK_ACCESS_2_MEMORY_READ_BIT", "VK_ACCESS_2_MEMORY_READ_BIT_KHR"]
+            : ["VK_ACCESS_TRANSFER_WRITE_BIT", "VK_ACCESS_2_TRANSFER_WRITE_BIT", "VK_ACCESS_2_TRANSFER_WRITE_BIT_KHR", "VK_ACCESS_MEMORY_WRITE_BIT", "VK_ACCESS_2_MEMORY_WRITE_BIT", "VK_ACCESS_2_MEMORY_WRITE_BIT_KHR"];
+        return expected.some(flag => flags.has(flag));
+    }
+
+    function barrierCovers(barrier, before, after) {
+        if (!stageMatches(barrier.srcStage) || !stageMatches(barrier.dstStage)) return false;
+        if (barrier.kind === "buffer") {
+            if (barrier.resource !== before.resource || barrier.resource !== after.resource) return false;
+            const barrierEnd = barrier.offset + barrier.size;
+            const accessEnd = before.offset + before.size;
+            if (barrier.offset > before.offset || barrierEnd < accessEnd) return false;
+        } else if (barrier.kind !== "memory") {
+            return false;
+        }
+        if (before.mode === "read" && after.mode === "write") return true;
+        return accessMatches(barrier.srcAccess, before.mode) && accessMatches(barrier.dstAccess, after.mode);
+    }
+
+    function recordHazard(event, access, previous, start, end, barriersByLane) {
+        if (previous.event.index === event.index ||
+            (previous.mode === "read" && access.mode === "read")) return;
+        const kind = previous.mode === "read" ? "WAR" : access.mode === "read" ? "RAW" : "WAW";
+        const before = { ...previous, offset: start, size: end - start };
+        const after = { ...access, offset: start, size: end - start };
+        const barriers = (barriersByLane.get(event.lane) || []).filter(barrier =>
+            barrier.index > previous.event.index && barrier.index < event.index
+        );
+        const covered = barriers.some(barrier =>
+            barrier.barrierScopes.some(scope => barrierCovers(scope, before, after))
+        );
+        const existing = event.hazards.find(hazard =>
+            hazard.kind === kind && hazard.resource === access.resource && hazard.priorIndex === previous.event.index
+        );
+        if (existing) {
+            existing.covered = existing.covered && covered;
+        } else {
+            event.hazards.push({
+                kind,
+                resource: access.resource,
+                covered,
+                requirement: kind === "WAR" ? "execution dependency" : "memory dependency",
+                priorIndex: previous.event.index
+            });
+        }
+    }
+
+    function findHazards(parsed) {
+        const segmentsByLaneAndResource = new Map();
+        const barriersByLane = new Map();
+        for (const event of parsed) {
+            if (!barriersByLane.has(event.lane)) barriersByLane.set(event.lane, []);
+            if (event.type === "barrier") barriersByLane.get(event.lane).push(event);
+        }
+        for (const event of parsed) {
+            if (event.type !== "transfer") continue;
+            for (const access of event.accesses) {
+                const key = `${event.lane}:${access.resource}`;
+                const start = access.offset;
+                const end = start + access.size;
+                if (end <= start) continue;
+                const segments = segmentsByLaneAndResource.get(key) || [];
+                const current = { ...access, event };
+                const updated = [];
+                let coveredEnd = start;
+                for (const segment of segments) {
+                    if (segment.end <= start || segment.start >= end) {
+                        updated.push(segment);
+                        continue;
+                    }
+                    const overlapStart = segment.start > start ? segment.start : start;
+                    const overlapEnd = segment.end < end ? segment.end : end;
+                    if (segment.start < start) {
+                        updated.push({ start: segment.start, end: start, access: segment.access });
+                    }
+                    if (coveredEnd < overlapStart) {
+                        updated.push({ start: coveredEnd, end: overlapStart, access: current });
+                    }
+                    recordHazard(event, access, segment.access, overlapStart, overlapEnd, barriersByLane);
+                    updated.push({ start: overlapStart, end: overlapEnd, access: current });
+                    if (overlapEnd > coveredEnd) coveredEnd = overlapEnd;
+                    if (segment.end > end) {
+                        updated.push({ start: end, end: segment.end, access: segment.access });
+                    }
+                }
+                if (coveredEnd < end) {
+                    updated.push({ start: coveredEnd, end, access: current });
+                }
+                updated.sort((left, right) => left.start < right.start ? -1 : left.start > right.start ? 1 : 0);
+                const merged = [];
+                for (const segment of updated) {
+                    const previous = merged[merged.length - 1];
+                    if (previous && previous.end === segment.start && previous.access === segment.access) {
+                        previous.end = segment.end;
+                    } else {
+                        merged.push(segment);
+                    }
+                }
+                segmentsByLaneAndResource.set(key, merged);
+            }
+        }
+    }
+
+    function formatRelativeTime(timestamp, start) {
+        const ticks = Number(timestamp - start);
+        return Number.isFinite(ticks) ? ticks.toLocaleString() : "n/a";
+    }
+
+    function eventColor(event, lane) {
+        const resource = lane.startsWith("Buffer ") ? lane.slice(7) : "";
+        const hazards = event.hazards.filter(hazard => !resource || hazard.resource === resource);
+        if (hazards.some(hazard => !hazard.covered)) return "#e3675b";
+        if (hazards.some(hazard => hazard.covered)) return "#65bd84";
+        if (event.type === "barrier") {
+            const colors = {
+                "host-to-device": "#f0a35e",
+                "device-to-host": "#df7291",
+                "host-host": "#d66ad3",
+                "compute-transfer": "#a980d5",
+                compute: "#8469c6",
+                transfer: "#3d9e91",
+                graphics: "#4d8fc4",
+                all: "#858b94",
+                other: "#858b94"
+            };
+            return colors[event.barrierType] || colors.other;
+        }
+        if (event.type === "dispatch") return "#d99445";
+        if (event.type === "transfer") {
+            const access = event.accesses.find(item => item.resource === resource);
+            return access && access.mode === "read" ? "#5cb9b2" : "#6ca8e8";
+        }
+        return "#858b94";
+    }
+
+    function timelineEventAt(clientX, clientY) {
+        if (events.length === 0) return null;
+        const bounds = canvas.getBoundingClientRect();
+        const rowHeight = Number(canvas.dataset.rowHeight || 42);
+        const x = clientX - bounds.left;
+        const y = clientY - bounds.top;
+        const laneIndex = Math.floor((y - 8) / rowHeight);
+        const lane = lanes[laneIndex];
+        if (!lane) return null;
+        const plotLeft = Number(canvas.dataset.plotLeft || 0);
+        const plotWidth = Number(canvas.dataset.plotWidth || 0);
+        const minTime = BigInt(canvas.dataset.minTime || "0");
+        const range = Number(canvas.dataset.range || 1);
+        if (plotWidth <= 0 || range <= 0) return null;
+        const resource = lane.startsWith("Buffer ") ? lane.slice(7) : "";
+        let hovered = null;
+        for (const item of events) {
+            if (!item.visualLanes.includes(lane)) continue;
+            const duration = item.labelEndTimestamp !== undefined
+                ? item.labelEndTimestamp - item.timestamp
+                : item.duration;
+            const eventX = plotLeft + Number(item.timestamp - minTime) / range * plotWidth;
+            const durationWidth = Number(duration) / range * plotWidth;
+            let barWidth = Math.max(2, Math.min(100, durationWidth));
+            if (item.type === "barrier") barWidth = 2;
+            if (item.type === "label") {
+                barWidth = item.labelEndTimestamp !== undefined ? Math.max(2, durationWidth) : 2;
+            }
+            const barY = laneIndex * rowHeight + (item.type === "label" ? 10 : 8);
+            const barHeight = item.type === "label" ? 15 : 19;
+            if (y < barY - 3 || y > barY + barHeight + 3) continue;
+            if (x < eventX - 4 || x > eventX + barWidth + 4) continue;
+            hovered = item;
+        }
+        return hovered ? { event: hovered, resource } : null;
+    }
+
+    function timelineTooltipText(event, resource) {
+        let type = event.name;
+        if (event.type === "dispatch") {
+            type = "Dispatch (access unknown)";
+        } else if (event.type === "transfer") {
+            const access = event.accesses.find(item => item.resource === resource);
+            type = access ? `Buffer ${access.mode}` : "Buffer transfer";
+        } else if (event.type === "barrier") {
+            type = event.barrierLabel || "Pipeline barrier";
+        } else if (event.type === "label") {
+            type = "Debug label";
+        }
+        const hazards = event.hazards.filter(hazard => !resource || hazard.resource === resource);
+        const warnings = Array.from(new Set(hazards.map(hazard =>
+            hazard.covered ? "Dependency covered" : "Uncovered dependency"
+        )));
+        return [type, event.name, ...warnings].filter(Boolean).join("\n");
+    }
+
+    function hideTimelineTooltip() {
+        timelineTooltip.hidden = true;
+    }
+
+    function showTimelineTooltip(event, clientX, clientY) {
+        timelineTooltip.textContent = timelineTooltipText(event.event, event.resource);
+        timelineTooltip.hidden = false;
+        timelineTooltip.style.left = `${Math.max(8, Math.min(clientX + 12, window.innerWidth - timelineTooltip.offsetWidth - 8))}px`;
+        timelineTooltip.style.top = `${Math.max(8, Math.min(clientY + 12, window.innerHeight - timelineTooltip.offsetHeight - 8))}px`;
+    }
+
+    function drawTimeline() {
+        hideTimelineTooltip();
+        const visible = events;
+        if (visible.length === 0) return;
+        const minTime = visible.reduce((value, event) => event.timestamp < value ? event.timestamp : value, visible[0].timestamp);
+        let maxTime = visible.reduce((value, event) => {
+            const end = event.labelEndTimestamp !== undefined
+                ? event.labelEndTimestamp
+                : event.timestamp + event.duration;
+            return end > value ? end : value;
+        }, visible[0].labelEndTimestamp !== undefined
+            ? visible[0].labelEndTimestamp
+            : visible[0].timestamp + visible[0].duration);
+        if (maxTime <= minTime) maxTime = minTime + 1n;
+        const baseWidth = Math.max(600, timelineScroll.clientWidth - 2);
+        const width = Math.round(baseWidth * zoom);
+        const rowHeight = 42;
+        const height = Math.max(70, lanes.length * rowHeight + 28);
+        const pixelRatio = window.devicePixelRatio || 1;
+        canvas.width = width * pixelRatio;
+        canvas.height = height * pixelRatio;
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
+        context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+        context.clearRect(0, 0, width, height);
+        const plotLeft = Math.min(180, Math.max(120, width * 0.12));
+        const plotWidth = width - plotLeft - 12;
+        const range = Number(maxTime - minTime);
+        context.font = "12px system-ui, sans-serif";
+        lanes.forEach((lane, laneIndex) => {
+            const y = laneIndex * rowHeight + 24;
+            context.fillStyle = "#aeb5bd";
+            context.fillText(lane, 8, y + 12, plotLeft - 16);
+            context.strokeStyle = "#343940";
+            context.beginPath();
+            context.moveTo(plotLeft, y + 17);
+            context.lineTo(width - 8, y + 17);
+            context.stroke();
+        });
+        const step = range / 10;
+        for (let i = 0; i <= 10; i++) {
+            const x = plotLeft + plotWidth * i / 10;
+            context.strokeStyle = "#292d33";
+            context.beginPath();
+            context.moveTo(x, 18);
+            context.lineTo(x, height);
+            context.stroke();
+            context.fillStyle = "#858b94";
+            context.fillText(formatRelativeTime(minTime + BigInt(Math.round(step * i)), minTime), x + 2, 12);
+        }
+        for (const event of visible) {
+            const x = plotLeft + Number(event.timestamp - minTime) / range * plotWidth;
+            const duration = event.labelEndTimestamp !== undefined
+                ? event.labelEndTimestamp - event.timestamp
+                : event.duration;
+            const durationWidth = Number(duration) / range * plotWidth;
+            const barWidth = Math.max(2, Math.min(100, durationWidth));
+            for (const lane of event.visualLanes) {
+                const laneIndex = lanes.indexOf(lane);
+                if (laneIndex < 0) continue;
+                const y = laneIndex * rowHeight + 8;
+                context.fillStyle = eventColor(event, lane);
+                if (event.type === "label") {
+                    const labelWidth = event.labelEndTimestamp !== undefined ? Math.max(2, durationWidth) : 2;
+                    context.fillRect(x, y + 2, labelWidth, 15);
+                } else if (event.type === "barrier") {
+                    context.fillRect(x, y, 2, 19);
+                } else {
+                    context.fillRect(x, y, barWidth, 19);
+                }
+            }
+        }
+        document.getElementById("timeline-info").textContent =
+            `Showing ${visible.length.toLocaleString()} events across ${lanes.length.toLocaleString()} buffer and unknown-resource lanes. The horizontal axis is relative XML timestamp (ticks).`;
+        canvas.dataset.plotLeft = String(plotLeft);
+        canvas.dataset.plotWidth = String(plotWidth);
+        canvas.dataset.minTime = minTime.toString();
+        canvas.dataset.range = String(range);
+        canvas.dataset.rowHeight = String(rowHeight);
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
+    }
+
+    function setZoom(value, anchorX = timelineScroll.clientWidth / 2) {
+        const previousWidth = canvas.width / (window.devicePixelRatio || 1);
+        const previousPlotLeft = Number(canvas.dataset.plotLeft || 0);
+        const previousPlotWidth = Number(canvas.dataset.plotWidth || previousWidth);
+        const anchorRatio = previousPlotWidth > 0
+            ? Math.max(0, Math.min(1, (timelineScroll.scrollLeft + anchorX - previousPlotLeft) / previousPlotWidth))
+            : 0;
+        zoom = Math.max(1, Math.min(16, value));
+        zoomSlider.value = String(zoom);
+        document.getElementById("zoom-level").textContent = `${zoom.toFixed(2)}x`;
+        drawTimeline();
+        const plotLeft = Number(canvas.dataset.plotLeft || 0);
+        const plotWidth = Number(canvas.dataset.plotWidth || canvas.clientWidth);
+        timelineScroll.scrollLeft = Math.max(0, plotLeft + anchorRatio * plotWidth - anchorX);
+    }
+
+    function eventDescription(event) {
+        const hazards = event.hazards.map(hazard =>
+            `${hazard.kind} ${hazard.requirement}: buffer ${hazard.resource} (${hazard.covered ? "covered" : "uncovered"})`
+        );
+        return [
+            `command: ${event.barrierLabel || event.name}`,
+            `chunkIndex: ${event.index}`,
+            `timestamp: ${event.timestamp}`,
+            `duration: ${event.duration} tick`,
+            `command buffer: ${event.buffer || "n/a"}`,
+            `label: ${event.label || "(none)"}`,
+            event.detail,
+            ...hazards
+        ].filter(Boolean).join("\n");
+    }
+
+    function selectEvent(event) {
+        document.getElementById("event-details").textContent = eventDescription(event);
+    }
+
+    function updateList() {
+        const query = searchInput.value.trim().toLowerCase();
+        const filter = filterInput.value;
+        const filtered = events.filter(event => {
+            if (filter === "hazards" && !event.hazards.some(hazard => !hazard.covered)) return false;
+            if (filter === "covered" && !event.hazards.some(hazard => hazard.covered)) return false;
+            if (filter === "barriers" && event.type !== "barrier") return false;
+            if (filter === "dispatch" && event.type !== "dispatch") return false;
+            if (filter === "transfer" && event.type !== "transfer") return false;
+            const text = `${event.name} ${event.label} ${event.detail} ${event.buffer}`.toLowerCase();
+            return !query || text.includes(query);
+        });
+        eventsBody.replaceChildren();
+        const fragment = document.createDocumentFragment();
+        for (const event of filtered.slice(0, 600)) {
+            const row = document.createElement("tr");
+            const cells = [
+                formatRelativeTime(event.timestamp, events[0].timestamp),
+                event.barrierLabel || event.name,
+                event.buffer || "-",
+                event.label || "-",
+                event.hazards.length
+                    ? eventDescription(event).split("\n").slice(-event.hazards.length).join("; ")
+                    : event.detail
+            ];
+            for (const value of cells) {
+                const cell = document.createElement("td");
+                cell.textContent = value;
+                row.appendChild(cell);
+            }
+            row.addEventListener("click", () => selectEvent(event));
+            fragment.appendChild(row);
+        }
+        eventsBody.appendChild(fragment);
+        document.getElementById("event-count").textContent =
+            `Showing ${Math.min(filtered.length, 600).toLocaleString()} of ${filtered.length.toLocaleString()}`;
+    }
+
+    async function loadFile(file) {
+        if (!file) return;
+        document.getElementById("file-name").textContent = file.name;
+        status.textContent = `Loading ${file.name}...`;
+        status.className = "muted";
+        results.hidden = true;
+        try {
+            const xml = await file.text();
+            if (!/<rdc(?:\s|>)/.test(xml)) {
+                throw new Error("RenderDoc XML <rdc> root element not found.");
+            }
+            events = parseEvents(xml).sort((a, b) => a.index - b.index);
+            if (events.length === 0) {
+                throw new Error("No supported Vulkan commands found.");
+            }
+            findHazards(events);
+            assignTimelineLanes(events);
+            const barriers = events.filter(event => event.type === "barrier").length;
+            const dispatches = events.filter(event => event.type === "dispatch").length;
+            const risks = events.reduce((count, event) =>
+                count + event.hazards.filter(hazard => !hazard.covered).length, 0
+            );
+            const covered = events.reduce((count, event) =>
+                count + event.hazards.filter(hazard => hazard.covered).length, 0
+            );
+            document.getElementById("stat-events").textContent = events.length.toLocaleString();
+            document.getElementById("stat-barriers").textContent = barriers.toLocaleString();
+            document.getElementById("stat-hazards").textContent = risks.toLocaleString();
+            document.getElementById("stat-covered").textContent = covered.toLocaleString();
+            document.getElementById("stat-unknown").textContent = dispatches.toLocaleString();
+            results.hidden = false;
+            drawTimeline();
+            updateList();
+            status.textContent = `Parsed ${file.name}.`;
+        } catch (error) {
+            events = [];
+            status.textContent = `Parse error: ${error.message}`;
+            status.className = "warning";
+        }
+    }
+
+    fileInput.addEventListener("change", () => loadFile(fileInput.files[0]));
+    searchInput.addEventListener("input", updateList);
+    filterInput.addEventListener("change", updateList);
+    window.addEventListener("resize", () => drawTimeline());
+    zoomSlider.addEventListener("input", () => setZoom(Number(zoomSlider.value)));
+    document.getElementById("zoom-in").addEventListener("click", () => setZoom(zoom * 1.5));
+    document.getElementById("zoom-out").addEventListener("click", () => setZoom(zoom / 1.5));
+    document.getElementById("zoom-fit").addEventListener("click", () => {
+        setZoom(1, 0);
+        timelineScroll.scrollLeft = 0;
+    });
+    for (const eventName of ["dragenter", "dragover"]) {
+        dropArea.addEventListener(eventName, event => {
+            event.preventDefault();
+            dropArea.classList.add("dragging");
+        });
+    }
+    for (const eventName of ["dragleave", "drop"]) {
+        dropArea.addEventListener(eventName, event => {
+            event.preventDefault();
+            dropArea.classList.remove("dragging");
+        });
+    }
+    dropArea.addEventListener("drop", event => loadFile(event.dataTransfer.files[0]));
+    timelineScroll.addEventListener("wheel", event => {
+        if (!event.ctrlKey) return;
+        event.preventDefault();
+        const bounds = timelineScroll.getBoundingClientRect();
+        const anchorX = event.clientX - bounds.left;
+        setZoom(zoom * Math.exp(-event.deltaY * 0.002), anchorX);
+    }, { passive: false });
+    timelineScroll.addEventListener("scroll", hideTimelineTooltip);
+    canvas.addEventListener("pointermove", event => {
+        const hovered = timelineEventAt(event.clientX, event.clientY);
+        canvas.style.cursor = hovered ? "pointer" : "";
+        if (hovered) {
+            showTimelineTooltip(hovered, event.clientX, event.clientY);
+        } else {
+            hideTimelineTooltip();
+        }
+    });
+    canvas.addEventListener("pointerleave", () => {
+        canvas.style.cursor = "";
+        hideTimelineTooltip();
+    });
+    canvas.addEventListener("click", event => {
+        if (!events.length) return;
+        const bounds = canvas.getBoundingClientRect();
+        const rowHeight = Number(canvas.dataset.rowHeight || 42);
+        const laneIndex = Math.floor((event.clientY - bounds.top - 8) / rowHeight);
+        const lane = lanes[laneIndex];
+        if (!lane) return;
+        const plotLeft = Number(canvas.dataset.plotLeft || 0);
+        const plotWidth = Number(canvas.dataset.plotWidth || 0);
+        const minTime = BigInt(canvas.dataset.minTime || "0");
+        const range = Number(canvas.dataset.range || 1);
+        const x = event.clientX - bounds.left - plotLeft;
+        if (x < 0 || x > plotWidth) return;
+        const targetTime = minTime + BigInt(Math.round(x / plotWidth * range));
+        let closest = null;
+        let closestDelta = null;
+        for (const item of events.filter(candidate => candidate.visualLanes.includes(lane))) {
+            const delta = item.timestamp > targetTime ? item.timestamp - targetTime : targetTime - item.timestamp;
+            if (closestDelta === null || delta < closestDelta) {
+                closest = item;
+                closestDelta = delta;
+            }
+        }
+        if (closest) selectEvent(closest);
+    });
+</script>
+</body>
+</html>
