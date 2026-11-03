@@ -148,8 +148,12 @@ if (Vulkan_FOUND)
         list(APPEND VULKAN_SHADER_GEN_CMAKE_ARGS -DGGML_VULKAN_SHADER_DEBUG_INFO=ON)
     endif()
 
-    if (GGML_VULKAN_VALIDATE)
+    if (GGML_VULKAN_VALIDATE OR GGML_VULKAN_VALIDATE_SYNC)
         add_compile_definitions(GGML_VULKAN_VALIDATE)
+    endif()
+
+    if (GGML_VULKAN_VALIDATE_SYNC)
+        add_compile_definitions(GGML_VULKAN_VALIDATE_SYNC)
     endif()
 
     if (GGML_VULKAN_RUN_TESTS)

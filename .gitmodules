@@ -1,0 +1,3 @@
+[submodule "vendor/renderdoc"]
+	path = vendor/renderdoc
+	url = https://github.com/baldurk/renderdoc.git
